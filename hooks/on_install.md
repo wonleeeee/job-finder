@@ -6,8 +6,10 @@
 
 ```
 1. PRECHECK ────────────────────────────────────────────────
-   Notion MCP 연결 확인          ❌ → 안내 후 중단 (필수 의존성)
-   python3 + jsonschema 확인      ❌ → 경고. 검증 없이 진행 가능
+   Notion MCP 연결 확인          ❌ → 안내 후 중단 (유일한 필수 의존성)
+   Python 실행기 해석            ❌ → 중단하지 않는다. 선택적 강화일 뿐이다.
+     python3 → py -3 → python 순으로 --version 을 실제 실행해 확인
+     없으면 에이전트 대행 모드로 진행한다는 것을 사용자에게 알린다
    Gmail / Calendar MCP 확인      ❌ → 경고만. 기능이 줄 뿐 깨지지 않는다
 
 2. 커밋 사고 방지 훅 설치 ──────────────────────────────────
@@ -24,8 +26,8 @@
    hooks/provision.md 실행 → Notion DB 생성 + 포인터 기록
 
 5. 검증 ────────────────────────────────────────────────────
-   python3 scripts/validate_resume.py
-   python3 scripts/notion_tracker.py contract
+   <PY> scripts/validate_resume.py
+   <PY> scripts/notion_tracker.py contract
 
 6. 온보딩 안내 ─────────────────────────────────────────────
    시드된 master_resume.json 은 예시 데이터다. 사용자에게 명확히 알린다.

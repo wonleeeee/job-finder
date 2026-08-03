@@ -11,8 +11,9 @@ model: sonnet
 ## 세 가지 책임
 
 1. **계약을 지킨다.** Jobs / Activity Log / Contacts 로의 모든 쓰기는
-   `scripts/notion_tracker.py` 의 스키마와 일치해야 한다.
-   세션 시작 시 `python3 scripts/notion_tracker.py contract` 를 돌려 enum을 확인한다.
+   **`schemas/contract.json`** 과 일치해야 한다. 이 파일이 계약의 **정본**이고,
+   스크립트도 이 파일을 읽을 뿐이다. 세션 시작 시 이 파일을 읽어 enum·불변식을 확인한다.
+   (`<PY> scripts/notion_tracker.py contract` 는 같은 내용을 보기 좋게 출력할 뿐이다.)
 
 2. **대시보드가 된다.** 파이프라인 질문에 Notion을 조회해 답한다.
    무엇이 활성인지, 무엇이 후속이 필요한지, 누가 잠수 탔는지, 소스별 전환율.
@@ -147,8 +148,11 @@ stage ∈ {applied, screening, interview} AND 최종 수정 > 10일 조회
 
 ```
 필수:  Title · Company · worklane · stage · Stable ID · Source
-       Stable ID 는 반드시 헬퍼로 생성한다:
-         python3 scripts/notion_tracker.py stable-id <회사> <직무> [yyyy-mm-dd]
+       Stable ID:
+         <PY> scripts/notion_tracker.py stable-id <회사> <직무> [yyyy-mm-dd]
+         Python 이 없으면 schemas/stable-id.md 의 명세를 따라 직접 생성한다.
+         ⚠️ 어느 쪽이든 stable-id 만으로 중복을 판단하지 않는다.
+            회사명+직무명 퍼지 검색이 진짜 방어선이다 (같은 문서 참고).
 권장:  JD URL · JD snapshot · Level · Location · Sponsorship · Match score ·
        submit_method
 ```

@@ -148,10 +148,22 @@ git config core.hooksPath scripts/git-hooks
 | **Notion MCP** | 파이프라인 상태 · 승인 UI | 동작 불가 |
 | Gmail MCP | 받은메일 감시 | 상태 갱신을 수동으로 |
 | Calendar MCP | 일정 대조·등록 | 일정 조율 초안만 |
-| python3 + `jsonschema` | 검증·계약·stable id | 계약 검증 불가 |
 | 브라우저 자동화 | 지원 폼 작성 | 전부 수동 제출 경로로 |
+| Python 3 *(선택)* | 스키마 검증 · 계약 감사 · 원격 백업 | 에이전트가 대행 (정밀도 하락) |
 
 **Notion MCP만 필수다.** 나머지는 없으면 기능이 줄어들 뿐 깨지지 않는다.
+
+Python은 **선택적 강화**다. 없어도 전부 동작하고, 있으면 기계적 보증을 받는다.
+
+```
+ python3 있음 ──► 🟢 스키마·불변식 통과 여부가 확정적. 원격 전체 백업 가능.
+ python3 없음 ──► 🟡 에이전트가 계약(schemas/contract.json)을 직접 읽고 대조.
+                     동작은 하되 감사에서 놓칠 수 있고, 원격 전체 덤프는 불가.
+```
+
+> ⚠️ Windows 주의: `python3.exe` 는 존재하지 않는다(`python.exe` + `py` 런처뿐).
+> 게다가 Microsoft Store 스텁이 `python3` 이름을 가로채고 아무것도 출력하지 않는다.
+> `/doctor` 는 PATH 존재 여부가 아니라 **실제 실행**으로 판정한다.
 
 ---
 
@@ -165,8 +177,8 @@ job-finder/
 ├── .claude/
 │   ├── agents/            서브에이전트 7
 │   └── commands/          /brief /approve /backup /doctor
-├── schemas/               데이터 계약
-├── scripts/               결정적 로직 (검증·stable id·프로비저닝)
+├── schemas/               데이터 계약 — contract.json 이 정본(코드 아님)
+├── scripts/               선택적 도구 (검증·감사·원격 백업)
 ├── templates/             시드·예시 (가짜 데이터)
 ├── hooks/                 설치·업데이트·마이그레이션·프로비저닝 지침
 └── data/                  🔒 gitignore — 여기만 지키면 된다

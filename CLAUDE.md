@@ -77,19 +77,41 @@ stage    (외부 진행)  lead ────────────────�
 - 비밀값은 **MCP(OAuth) 우선**. Notion·Gmail·Calendar는 토큰을 파일에 저장하지 않는다.
   MCP로 못 붙는 것만 `.env`(gitignore).
 
-## 자주 쓰는 명령
+## 도구는 선택이다 — 없으면 네가 대행한다
 
-```bash
-python3 scripts/validate_resume.py                    # 마스터 이력서 검증
-python3 scripts/validate_resume.py <path>             # 임의 이력서 검증
-python3 scripts/notion_tracker.py contract            # 데이터 계약 덤프 (세션 시작 시 권장)
-python3 scripts/notion_tracker.py stable-id <co> <role> [yyyy-mm-dd]
-python3 scripts/notion_tracker.py status              # 파이프라인 현황 (NOTION_TOKEN 필요)
+Python 스크립트는 **있으면 쓰고 없으면 대행**한다. 동작 여부가 아니라 **정밀도**가 달라진다.
+
+### 실행기 해석
+
 ```
+python3  →  py -3  →  python      순서로 시도하고,
+--version 출력이 "Python 3" 으로 시작하는 첫 번째를 쓴다.
+
+⚠️ Windows 에는 python3.exe 가 없다 (python.exe + py 런처뿐).
+   게다가 WindowsApps 의 Microsoft Store 스텁이 python3 이름을 가로채는데,
+   이 스텁은 아무것도 출력하지 않고 끝난다.
+   → "PATH 에 있다" 로 판단하지 말고 반드시 실행해서 확인한다.
+```
+
+### 명령과 대행 절차
+
+| 도구 | 명령 | 없을 때 |
+|---|---|---|
+| 이력서 검증 | `<PY> scripts/validate_resume.py [path]` | resume-curator 가 `schemas/master_resume.schema.json` 을 읽어 직접 대조 (required·type·enum) |
+| 계약 확인 | `<PY> scripts/notion_tracker.py contract` | **`schemas/contract.json` 을 직접 읽는다.** 정본이 데이터라 손실이 없다 |
+| stable-id | `<PY> scripts/notion_tracker.py stable-id <co> <role> [date]` | `schemas/stable-id.md` 의 명세를 따라 직접 생성 |
+| 위생 감사 | `<PY> scripts/notion_tracker.py audit` | tracker 가 불변식을 수동 점검 — **놓칠 수 있다** |
+| 파이프라인 현황 | `<PY> scripts/notion_tracker.py status` | Notion MCP 로 직접 조회 (오히려 이쪽이 기본) |
+| 원격 백업 | `<PY> scripts/notion_tracker.py export` | 전체 덤프 불가. **원격 마이그레이션 전이라면 사용자에게 위험을 알린다** |
+
+`contract` 와 `status` 는 대행에 손실이 없다. `audit` 과 `export` 는 손실이 있으니
+그 상태로 파괴적 작업(원격 스키마 변경)을 하지 않는다.
 
 ## 규약
 
-- Python ≥ 3.9. stdlib + `jsonschema` 만. 의존성을 늘리지 않는다.
+- 계약의 정본은 **`schemas/contract.json`** 이다. 코드가 아니라 데이터다.
+  스크립트도 이 파일을 읽는다. enum 을 어디에도 하드코딩하지 않는다.
+- Python ≥ 3.9, **stdlib만**. `jsonschema` 가 있으면 쓰고 없으면 내장 검증기로 떨어진다.
 - 날짜는 ISO-8601(`YYYY-MM-DD`) 또는 RFC 3339(`...T00:00:00Z`).
 - 스키마 변경은 `meta.schema_version`(semver)을 올리고 `hooks/migrate.md`에 마이그레이션 절차를 추가한다.
 - 새 에이전트는 `.claude/agents/<name>.md`에 frontmatter(`name`,`description`,`tools`,`model`)와 함께 둔다.

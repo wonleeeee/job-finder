@@ -19,14 +19,14 @@
    → 다르면 hooks/migrate.md 실행
 
 2. 원격 계약 확인  ★ 로컬 마이그레이션과 다른 문제다
-   python3 scripts/notion_tracker.py contract 의 enum 목록
+   <PY> scripts/notion_tracker.py contract 의 enum 목록
    vs 실제 Notion DB의 select 옵션
    → 새 옵션이 계약에 추가됐으면 Notion DB에 추가한다
    → 계약에서 사라진 옵션은 자동 삭제하지 않는다.
       그 값을 쓰는 행이 있을 수 있다. 보고만 하고 사용자가 정하게 한다.
 
    ⚠️ 원격 변경 전에는 반드시 백업한다. 파일 복사로 되돌릴 수 없기 때문이다:
-      python3 scripts/notion_tracker.py status > data/backups/<날짜>-pre-update.txt
+      <PY> scripts/notion_tracker.py status > data/backups/<날짜>-pre-update.txt
       가능하면 전체 행을 JSON으로 덤프해 data/backups/ 에 남긴다
 
 3. 훅 경로 재확인
@@ -34,9 +34,9 @@
    (새 clone 이나 설정 초기화 후 풀릴 수 있다)
 
 4. 검증
-   python3 scripts/validate_resume.py
-   python3 scripts/notion_tracker.py contract
-   python3 scripts/notion_tracker.py audit     (토큰 있으면)
+   <PY> scripts/validate_resume.py
+   <PY> scripts/notion_tracker.py contract
+   <PY> scripts/notion_tracker.py audit     (토큰 있으면)
 
 5. 변경 요약 보고
    무엇이 바뀌었고 사용자가 알아야 할 것이 무엇인지.

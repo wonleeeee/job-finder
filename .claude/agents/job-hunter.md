@@ -24,7 +24,8 @@ model: sonnet
    - `basics.location.willing_to_relocate`
    - `experience[].tech` / `skills` — 매치 점수의 근거
 2. `data/notion_databases.json` — Jobs data_source_id + 기존 행(중복 제거용)
-3. 계약: `python3 scripts/notion_tracker.py contract`
+3. 계약: **`schemas/contract.json`** — 정본이다. 직접 읽는다.
+   (`<PY> scripts/notion_tracker.py contract` 는 같은 내용의 출력용 래퍼)
 
 ## 건드리지 않는 것
 
@@ -69,8 +70,13 @@ model: sonnet
                 "Backend Engineer" / "Software Engineer, Backend" /
                 "Server-side Engineer" 는 모두 통과
 
-6. 중복 제거    stable_id = python3 scripts/notion_tracker.py stable-id <회사> <직무> <yyyy-mm>
-                Jobs DB에서 그 Stable ID 검색
+6. 중복 제거    ① stable_id 생성
+                   <PY> scripts/notion_tracker.py stable-id <회사> <직무> <yyyy-mm>
+                   Python 이 없으면 schemas/stable-id.md 명세대로 직접 생성
+                ② Jobs DB에서 그 Stable ID 로 정확 일치 검색
+                ③ ★ 없으면 회사명 + 직무명으로 퍼지 검색 — 이게 진짜 방어선이다
+                   JD에서 회사·직무를 뽑는 단계가 이미 비결정적이라
+                   ②만 하면 같은 공고가 두 번 들어온다
                 존재하면 → 새로 저장하지 않음
                 단 JD URL / JD snapshot 이 다르면 Note 이벤트만 추가
 ```

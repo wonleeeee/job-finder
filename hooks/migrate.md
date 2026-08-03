@@ -8,7 +8,7 @@
 ```
 1. 비파괴  마이그레이션 전 data/backups/master_resume.<oldVersion>.json 으로 백업
 2. 순차    한 번에 한 버전씩 (1.0.0 → 1.1.0 → 2.0.0)
-3. 검증    각 단계 후 python3 scripts/validate_resume.py
+3. 검증    각 단계 후 <PY> scripts/validate_resume.py
 4. 보고    완료 후 무엇이 바뀌었는지 사용자에게 요약
 5. 중단    어느 단계든 검증 실패 시 백업에서 복구하고 중단. 억지로 진행하지 않는다
 ```
@@ -26,7 +26,7 @@
 2. 추가    새 select 옵션을 DB에 추가 (추가는 안전)
 3. 이행    기존 행의 값을 새 어휘로 변환 (필요한 경우)
 4. 삭제    옛 옵션 제거는 사용자 확인 후에만. 그 값을 쓰는 행이 0인지 먼저 확인
-5. 검증    python3 scripts/notion_tracker.py audit
+5. 검증    <PY> scripts/notion_tracker.py audit
 ```
 
 ## 버전별 변경

@@ -1,0 +1,90 @@
+{
+  "$comment": "Tracker 데이터 계약 — 단일 원천. 스크립트와 에이전트가 모두 이 파일을 읽는다. 이전에는 notion_tracker.py 에 하드코딩돼 있었고, 그러면 Python 없이 동작할 때 계약을 알 방법이 없었다.",
+  "contractVersion": 1,
+
+  "axes": {
+    "$comment": "2축. 절대 한 컬럼으로 합치지 않는다. worklane=내 작업(자동화 구간), stage=외부 진행.",
+    "worklane": {
+      "description": "내가 이 건에 대해 무엇을 했나",
+      "values": ["discovered", "proposed", "dismissed", "tailored", "ready", "needs_human", "submitted"],
+      "flow": ["discovered", "proposed", "tailored", "ready", "submitted"],
+      "branches": {
+        "dismissed": "승인 전 사용자가 거부 (터미널)",
+        "needs_human": "자동 제출 불가 — 제출 키트로 인계"
+      },
+      "terminal": ["dismissed", "submitted"]
+    },
+    "stage": {
+      "description": "회사가 나를 어디까지 봤나",
+      "values": ["lead", "applied", "screening", "interview", "offer", "closed"],
+      "flow": ["lead", "applied", "screening", "interview", "offer", "closed"]
+    }
+  },
+
+  "invariants": [
+    {
+      "id": "axis-coupling",
+      "rule": "stage != 'lead'  <=>  worklane == 'submitted'",
+      "why": "지원하지 않았는데 외부 진행이 있을 수 없고, 지원했는데 worklane 이 남아있을 수 없다"
+    },
+    {
+      "id": "dismiss-reason-required",
+      "rule": "worklane == 'dismissed'  =>  dismiss_reason 필수",
+      "why": "거부 사유가 선호 학습의 유일한 입력이다"
+    },
+    {
+      "id": "closed-reason-required",
+      "rule": "stage == 'closed'  =>  closed_reason 필수",
+      "why": "rejected 와 ghosted 를 뭉개면 퍼널 통계가 오염된다"
+    },
+    {
+      "id": "stage-change-needs-transition",
+      "rule": "Event type == 'Stage Change'  =>  'From → To' 필수",
+      "why": "이력 재구성이 불가능해진다"
+    }
+  ],
+
+  "enums": {
+    "closed_reason": {
+      "values": ["accepted", "rejected", "ghosted", "withdrawn"],
+      "notes": {
+        "rejected": "회사가 명시적으로 거절",
+        "ghosted": "마지막 기대 응답 후 14일 무응답",
+        "withdrawn": "지원 후 내가 철회 (지원 전 거부는 worklane=dismissed)"
+      }
+    },
+    "dismiss_reason": {
+      "$comment": "선호 학습 신호. 같은 사유 5건 누적 시 briefer 가 필터 조정을 제안한다. 목록을 늘리면 집계가 의미를 잃으므로 신중히.",
+      "values": ["location", "level", "comp", "domain", "company", "sponsorship", "stack", "no_response", "unspecified"]
+    },
+    "submit_method": {
+      "$comment": "저장 시점에 판정한다. 사용자가 '이건 내가 해야겠구나'를 미리 알아야 하기 때문.",
+      "values": ["auto-form", "assisted", "manual", "email"],
+      "hints": {
+        "auto-form": "greenhouse.io · lever.co · ashbyhq.com",
+        "manual": "myworkdayjobs.com · 계정 생성 요구 · 복잡한 로그인",
+        "email": "지원처가 이메일 주소"
+      }
+    },
+    "event_type": {
+      "values": ["Discovered", "Proposed", "Approved", "Dismissed", "Tailored", "Applied", "Recruiter Reach", "Stage Change", "Interview Scheduled", "Interview Done", "Note", "Reject", "Offer", "Withdraw"]
+    },
+    "agent": {
+      "values": ["Job Hunter", "Briefer", "Resume Tailor", "Applicator", "Interview Coach", "Tracker", "User"]
+    },
+    "level": { "values": ["Mid", "Senior", "Staff", "Unknown"] },
+    "sponsorship": { "values": ["Yes", "No", "Unknown"] },
+    "source": {
+      "values": ["LinkedIn", "Company site", "Referral", "Recruiter", "Indeed", "Wellfound", "Levels.fyi", "Other"]
+    }
+  },
+
+  "required": {
+    "job": ["Title", "Company", "worklane", "stage", "Stable ID", "Source"],
+    "event": ["Summary", "Timestamp", "Event type", "Agent"]
+  },
+
+  "ranges": {
+    "Match score": { "min": 0, "max": 100 }
+  }
+}

@@ -114,7 +114,7 @@ Activity Log에 `Tailored` 이벤트 추가 (`Agent: Resume Tailor`).
 1. briefer 가 승격시킨 Jobs 행을 받는다
 2. notion-fetch → Title, Company, Stable ID, JD snapshot, JD URL
 3. 선별 알고리즘 실행 → data/tailored/<stable-id>/ 에 산출물 작성
-4. python3 scripts/validate_resume.py data/tailored/<stable-id>/resume.json
+4. <PY> scripts/validate_resume.py data/tailored/<stable-id>/resume.json
 5. Notion 갱신: worklane=tailored, Tailored resume 경로, Tailored 이벤트
 6. applicator 에게 인계 (submit_method 에 따라 자동 제출 또는 키트 생성)
 7. 간결 보고: "<stable-id>: 불릿 7선 · 4드롭 · 갭 2 · 준비 완료"

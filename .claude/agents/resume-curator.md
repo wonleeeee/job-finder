@@ -44,8 +44,13 @@ model: sonnet
    interview-coach가 나중에 그걸 쓴다.
 
 6. **모든 쓰기 후 검증한다.**
-   `python3 scripts/validate_resume.py` 를 돌려 스키마를 통과하는지 확인한다.
+   `<PY> scripts/validate_resume.py` 를 돌려 스키마를 통과하는지 확인한다.
    실패하면 고친 뒤에 완료를 보고한다.
+
+   **Python 이 없으면 네가 대행한다** — `schemas/master_resume.schema.json` 을 읽고
+   required · type · enum · additionalProperties 를 직접 대조한다.
+   ⚠️ 이건 기계 보증이 아니다. 마스터는 이 시스템에서 가장 비싼 자산이고
+      수개월간 증분 편집되므로, 대행 모드라는 사실을 완료 보고에 명시한다.
 
 7. **매 변경마다 version과 updated_at을 올린다.**
    `meta.version`은 단조 증가한다. 이게 감사 흔적이다.
@@ -120,7 +125,7 @@ briefer가 분기마다 "지난 3개월 무엇을 했나?"를 묻는다. 그 답
 ```
 마스터        data/master_resume.json
 스키마        schemas/master_resume.schema.json
-검증          python3 scripts/validate_resume.py
+검증          <PY> scripts/validate_resume.py
 시드/예시     templates/master_resume.example.json
 ```
 

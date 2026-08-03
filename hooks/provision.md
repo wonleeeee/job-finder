@@ -117,7 +117,7 @@
 ## 6. 검증
 
 ```
-python3 scripts/notion_tracker.py contract
+<PY> scripts/notion_tracker.py contract
 ```
 
 DB 3개의 id가 전부 출력되고 enum 목록이 위 표와 일치하면 성공이다.
@@ -140,7 +140,7 @@ DB 3개의 id가 전부 출력되고 enum 목록이 위 표와 일치하면 성�
 🚫 사용자 확인 없이 기존 DB를 수정하지 않는다.
    같은 이름의 DB가 이미 있으면 그걸 쓸지 새로 만들지 묻는다.
 🚫 select 옵션을 임의로 추가하지 않는다.
-   계약(scripts/notion_tracker.py)에 있는 것만 만든다.
+   계약 정본(schemas/contract.json)에 있는 것만 만든다.
    사람이 Notion에서 손으로 옵션을 추가하면 계약이 어긋나고
    에이전트 쓰기가 조용히 실패한다 — /doctor 가 이걸 잡는다.
 ```

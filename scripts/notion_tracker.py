@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
-"""Tracker contract + helpers for the Notion-backed pipeline.
+"""Tracker helpers for the Notion-backed pipeline.
 
-This module is the canonical reference for what every agent writes to the
-Notion Jobs / Activity Log / Contacts databases. Agents call the Notion MCP
-tools directly with payloads matching `validate_job_props` /
-`validate_event_props`; this file is the contract they validate against.
+OPTIONAL TOOL. The contract itself lives in `schemas/contract.json` — this
+script reads that file, it does not define it. Agents read the same file, so the
+system works without Python; running these commands just gives you *mechanical*
+checks instead of judgement calls.
 
-Why a script and not agent instructions: stable-id generation, enum checks and
-schema validation must be *deterministic*. If an LLM re-derives them each time,
-dedup breaks and the contract drifts (DESIGN.md §9).
+  contract   pretty-print schemas/contract.json      → agents can read the JSON directly
+  stable-id  deterministic dedup slug                → spec in schemas/stable-id.md
+  status     pipeline dashboard      (needs NOTION_TOKEN)
+  audit      hygiene check           (needs NOTION_TOKEN)  ← hardest to replace
+  export     dump every row to JSON  (needs NOTION_TOKEN)  ← remote backup
 
-Stdlib only. Optional NOTION_TOKEN enables a thin HTTP client for headless use
-(e.g. the nightly sweep). Without a token the CLI still prints the contract and
-generates stable ids.
+`export` matters most: remote state cannot be backed up by copying files, and
+hooks/on_update.md requires a dump before any remote migration.
 
-Usage:
-    python3 scripts/notion_tracker.py contract               # enums + DB ids
-    python3 scripts/notion_tracker.py stable-id <co> <role>  # deterministic slug
-    python3 scripts/notion_tracker.py status                 # dashboard (needs token)
-    python3 scripts/notion_tracker.py audit                  # hygiene check (needs token)
+Stdlib only. Usage: python3 scripts/notion_tracker.py <command> [args]
 """
 from __future__ import annotations
 
@@ -34,61 +31,36 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "data" / "notion_databases.json"
+CONTRACT_PATH = ROOT / "schemas" / "contract.json"
 
-# --- Canonical enums (must match the Notion DB select options) -------------
-#
-# TWO AXES. Do not merge them into one column (DESIGN.md §4).
-#   worklane = what *I* have done about this job     (automation happens here)
-#   stage    = where the *company* has taken me      (humans drive this)
 
-WORKLANE = [
-    "discovered",   # job-hunter found it; user has not seen it
-    "proposed",     # briefer put it in the weekly brief; awaiting approval
-    "dismissed",    # user rejected it pre-application (terminal)
-    "tailored",     # approved; resume tailored
-    "ready",        # form filled, awaiting user confirmation to submit
-    "needs_human",  # automation cannot submit; kit handed off
-    "submitted",    # actually applied (terminal for this axis)
-]
-WORKLANE_TERMINAL = {"dismissed", "submitted"}
+# --- Contract (data, not code) --------------------------------------------
 
-STAGE = [
-    "lead",         # not applied yet — the whole worklane runs inside this
-    "applied",
-    "screening",
-    "interview",
-    "offer",
-    "closed",
-]
-CLOSED_REASON = ["accepted", "rejected", "ghosted", "withdrawn"]
+def contract() -> dict:
+    if not CONTRACT_PATH.exists():
+        raise SystemExit(f"missing {CONTRACT_PATH} — the contract is data; restore it from git")
+    return json.loads(CONTRACT_PATH.read_text(encoding="utf-8-sig"))
 
-# Why a job was dismissed pre-application. Feeds the preference-learning loop
-# (DESIGN.md §10-②) — keep this list small so counts stay meaningful.
-DISMISS_REASON = [
-    "location", "level", "comp", "domain", "company",
-    "sponsorship", "stack", "no_response", "unspecified",
-]
 
-EVENT_TYPE = [
-    "Discovered", "Proposed", "Approved", "Dismissed", "Tailored", "Applied",
-    "Recruiter Reach", "Stage Change", "Interview Scheduled", "Interview Done",
-    "Note", "Reject", "Offer", "Withdraw",
-]
+def _entries(d: dict) -> list[tuple[str, Any]]:
+    """Real entries only — `$comment` keys carry prose for humans, not data."""
+    return [(k, v) for k, v in d.items() if not k.startswith("$")]
 
-AGENT = [
-    "Job Hunter", "Briefer", "Resume Tailor", "Applicator",
-    "Interview Coach", "Tracker", "User",
-]
 
-LEVEL = ["Mid", "Senior", "Staff", "Unknown"]
-SPONSORSHIP = ["Yes", "No", "Unknown"]
-SOURCE = [
-    "LinkedIn", "Company site", "Referral", "Recruiter",
-    "Indeed", "Wellfound", "Levels.fyi", "Other",
-]
-# Judged at save time, not at submit time, so the user knows up front which
-# ones will land on their plate (DESIGN.md §10-④).
-SUBMIT_METHOD = ["auto-form", "assisted", "manual", "email"]
+_C = contract()
+WORKLANE: list[str] = _C["axes"]["worklane"]["values"]
+WORKLANE_TERMINAL: set[str] = set(_C["axes"]["worklane"]["terminal"])
+STAGE: list[str] = _C["axes"]["stage"]["values"]
+CLOSED_REASON: list[str] = _C["enums"]["closed_reason"]["values"]
+DISMISS_REASON: list[str] = _C["enums"]["dismiss_reason"]["values"]
+SUBMIT_METHOD: list[str] = _C["enums"]["submit_method"]["values"]
+EVENT_TYPE: list[str] = _C["enums"]["event_type"]["values"]
+AGENT: list[str] = _C["enums"]["agent"]["values"]
+LEVEL: list[str] = _C["enums"]["level"]["values"]
+SPONSORSHIP: list[str] = _C["enums"]["sponsorship"]["values"]
+SOURCE: list[str] = _C["enums"]["source"]["values"]
+REQUIRED_JOB_PROPS: list[str] = _C["required"]["job"]
+REQUIRED_EVENT_PROPS: list[str] = _C["required"]["event"]
 
 
 # --- Config ---------------------------------------------------------------
@@ -100,7 +72,7 @@ def load_config() -> dict:
             "Run the provisioning hook first (hooks/provision.md) to create the\n"
             "Notion databases in your own workspace."
         )
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
 
 
 def db(name: str) -> dict:
@@ -108,9 +80,11 @@ def db(name: str) -> dict:
 
 
 # --- Stable IDs -----------------------------------------------------------
+# Spec + worked examples: schemas/stable-id.md  (agents follow it when Python
+# is unavailable — keep the two in sync).
 
 def stable_id(company: str, role: str, posted: date | str | None = None) -> str:
-    """Deterministic dedup key, e.g. 'anthropic-senior-backend-2026-04'."""
+    """Deterministic dedup key, e.g. 'anthropic-senior-backend-engineer-2026-04'."""
     if isinstance(posted, str):
         posted = date.fromisoformat(posted[:10])
     if posted is None:
@@ -120,15 +94,11 @@ def stable_id(company: str, role: str, posted: date | str | None = None) -> str:
 
 
 def _slug(s: str) -> str:
-    s = s.lower().strip()
-    s = re.sub(r"[^a-z0-9]+", "-", s)
-    return s.strip("-")[:40]
+    s = re.sub(r"[^a-z0-9]+", "-", s.lower().strip())
+    return s.strip("-")[:40].strip("-")
 
 
 # --- Validation -----------------------------------------------------------
-
-REQUIRED_JOB_PROPS = ("Title", "Company", "worklane", "stage", "Stable ID", "Source")
-
 
 def validate_job_props(props: dict[str, Any]) -> list[str]:
     errs: list[str] = []
@@ -141,10 +111,10 @@ def validate_job_props(props: dict[str, Any]) -> list[str]:
     if (st := props.get("stage")) and st not in STAGE:
         errs.append(f"stage {st!r} not in {STAGE}")
 
-    # Cross-axis invariants — the whole point of splitting the axes.
+    # Cross-axis invariants — the reason the axes were split at all.
     if props.get("stage") == "lead" and props.get("worklane") == "submitted":
         errs.append("worklane=submitted requires stage != 'lead' (submitted means applied)")
-    if props.get("stage") not in (None, "lead") and props.get("worklane") != "submitted":
+    if props.get("stage") not in (None, "", "lead") and props.get("worklane") != "submitted":
         errs.append(f"stage={props.get('stage')!r} requires worklane='submitted'")
     if props.get("worklane") == "dismissed" and not props.get("dismiss_reason"):
         errs.append("worklane=dismissed requires dismiss_reason (feeds preference learning)")
@@ -155,22 +125,21 @@ def validate_job_props(props: dict[str, Any]) -> list[str]:
     if (cr := props.get("closed_reason")) and cr not in CLOSED_REASON:
         errs.append(f"closed_reason {cr!r} not in {CLOSED_REASON}")
 
-    if (lv := props.get("Level")) and lv not in LEVEL:
-        errs.append(f"Level {lv!r} not in {LEVEL}")
-    if (sp := props.get("Sponsorship")) and sp not in SPONSORSHIP:
-        errs.append(f"Sponsorship {sp!r} not in {SPONSORSHIP}")
-    if (src := props.get("Source")) and src not in SOURCE:
-        errs.append(f"Source {src!r} not in {SOURCE}")
-    if (sm := props.get("submit_method")) and sm not in SUBMIT_METHOD:
-        errs.append(f"submit_method {sm!r} not in {SUBMIT_METHOD}")
-    if (ms := props.get("Match score")) is not None and not 0 <= float(ms) <= 100:
-        errs.append(f"Match score {ms} not in 0..100")
+    for key, allowed in (("Level", LEVEL), ("Sponsorship", SPONSORSHIP),
+                         ("Source", SOURCE), ("submit_method", SUBMIT_METHOD)):
+        if (v := props.get(key)) and v not in allowed:
+            errs.append(f"{key} {v!r} not in {allowed}")
+
+    rng = _C.get("ranges", {}).get("Match score", {})
+    if (ms := props.get("Match score")) is not None and rng:
+        if not rng["min"] <= float(ms) <= rng["max"]:
+            errs.append(f"Match score {ms} not in {rng['min']}..{rng['max']}")
     return errs
 
 
 def validate_event_props(props: dict[str, Any]) -> list[str]:
     errs: list[str] = []
-    for k in ("Summary", "Timestamp", "Event type", "Agent"):
+    for k in REQUIRED_EVENT_PROPS:
         if not props.get(k):
             errs.append(f"missing required field: {k!r}")
     if (et := props.get("Event type")) and et not in EVENT_TYPE:
@@ -211,24 +180,19 @@ class Notion:
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"notion {method} {path} -> {e.code} {e.read().decode()[:300]}")
 
-    def query_jobs(self, **filters: str) -> list[dict]:
-        body: dict = {"page_size": 100}
-        conds = [
-            {"property": k, "select": {"equals": v}}
-            for k, v in filters.items() if v
-        ]
-        if conds:
-            body["filter"] = conds[0] if len(conds) == 1 else {"and": conds}
-        r = self._req("POST", f"databases/{db('jobs')['database_id']}/query", body)
-        return r.get("results", [])
-
-    def query_recent_events(self, limit: int = 25) -> list[dict]:
-        body = {
-            "page_size": limit,
-            "sorts": [{"property": "Timestamp", "direction": "descending"}],
-        }
-        r = self._req("POST", f"databases/{db('activity_log')['database_id']}/query", body)
-        return r.get("results", [])
+    def query_all(self, which: str) -> list[dict]:
+        """Every row, following pagination. Used by status/audit/export."""
+        rows: list[dict] = []
+        cursor: str | None = None
+        while True:
+            body: dict = {"page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = self._req("POST", f"databases/{db(which)['database_id']}/query", body)
+            rows += r.get("results", [])
+            if not r.get("has_more"):
+                return rows
+            cursor = r.get("next_cursor")
 
 
 def _sel(page: dict, prop: str) -> str:
@@ -243,39 +207,55 @@ def _text(page: dict, prop: str) -> str:
     return "".join(t.get("plain_text", "") for t in page["properties"].get(prop, {}).get("rich_text", []))
 
 
+def _job_props(page: dict) -> dict:
+    return {
+        "Title": _title(page, "Title"),
+        "Company": _text(page, "Company"),
+        "worklane": _sel(page, "worklane"),
+        "stage": _sel(page, "stage"),
+        "Stable ID": _text(page, "Stable ID"),
+        "Source": _sel(page, "Source"),
+        "Level": _sel(page, "Level"),
+        "Sponsorship": _sel(page, "Sponsorship"),
+        "submit_method": _sel(page, "submit_method"),
+        "dismiss_reason": _sel(page, "dismiss_reason"),
+        "closed_reason": _sel(page, "closed_reason"),
+    }
+
+
 # --- CLI ------------------------------------------------------------------
 
 def cmd_contract() -> int:
+    c = _C
     try:
         cfg = load_config()
-        print("# Tracker contract\n")
-        print("## Databases")
+        print("# Databases")
         for name, d in cfg["databases"].items():
-            print(f"  - {name:13s}  {d.get('data_source_id', '?')}  ({d.get('url', '')})")
+            print(f"  {name:13s} {d.get('data_source_id', '?')}  {d.get('url', '')}")
     except SystemExit as e:
-        print("# Tracker contract\n")
-        print(f"## Databases\n  (not provisioned) {e}".replace("\n", "\n  "))
+        print(f"# Databases\n  (not provisioned — {e})")
 
-    print("\n## worklane — my work (automation lives here)")
-    print("  " + " -> ".join(w for w in WORKLANE if w not in ("dismissed", "needs_human")))
-    print("  branches: dismissed (pre-application reject), needs_human (handoff)")
-    print("  terminal: " + ", ".join(sorted(WORKLANE_TERMINAL)))
-    print("\n## stage — external process")
-    print("  " + " -> ".join(STAGE))
-    print("  closed_reason: " + ", ".join(CLOSED_REASON))
-    print("\n## Cross-axis invariants")
-    print("  stage != 'lead'          <=> worklane == 'submitted'")
-    print("  worklane == 'dismissed'   => dismiss_reason required")
-    print("  stage == 'closed'         => closed_reason required")
-    print("\n## dismiss_reason (preference-learning signal)\n  " + ", ".join(DISMISS_REASON))
-    print("\n## Event types\n  " + ", ".join(EVENT_TYPE))
-    print("\n## Agents\n  " + ", ".join(AGENT))
-    print("\n## submit_method (judged at save time)\n  " + ", ".join(SUBMIT_METHOD))
-    print("\n## Required Jobs props\n  " + ", ".join(REQUIRED_JOB_PROPS))
-    print("\n## Required Activity Log props")
-    print("  Summary, Timestamp, Event type, Agent")
-    print("  (+ Job relation whenever the event is about a specific job)")
-    print("  (+ 'From -> To' for Stage Change)")
+    for axis, spec in _entries(c["axes"]):
+        print(f"\n# {axis} — {spec['description']}")
+        print("  " + " -> ".join(spec["flow"]))
+        for k, v in spec.get("branches", {}).items():
+            print(f"  branch: {k} — {v}")
+        if spec.get("terminal"):
+            print(f"  terminal: {', '.join(spec['terminal'])}")
+
+    print("\n# Invariants")
+    for inv in c["invariants"]:
+        print(f"  {inv['rule']}")
+        print(f"      why: {inv['why']}")
+
+    print("\n# Enums")
+    for name, spec in _entries(c["enums"]):
+        print(f"  {name:16s} {', '.join(spec['values'])}")
+
+    print("\n# Required")
+    for kind, keys in c["required"].items():
+        print(f"  {kind:16s} {', '.join(keys)}")
+    print(f"\n(source: {CONTRACT_PATH.relative_to(ROOT)} — agents read this file directly)")
     return 0
 
 
@@ -292,7 +272,7 @@ def _connect() -> Notion | None:
         return Notion()
     except RuntimeError as e:
         print(f"NOTE: {e}", file=sys.stderr)
-        print("Use the Notion MCP from an agent for live state, or set NOTION_TOKEN.", file=sys.stderr)
+        print("Agents use the Notion MCP for live state — this command is for headless runs.", file=sys.stderr)
         return None
 
 
@@ -300,15 +280,14 @@ def cmd_status() -> int:
     n = _connect()
     if n is None:
         return 2
-    jobs = n.query_jobs()
-
+    jobs = n.query_all("jobs")
     by_lane: dict[str, int] = {}
     by_stage: dict[str, int] = {}
     for j in jobs:
         by_lane[_sel(j, "worklane")] = by_lane.get(_sel(j, "worklane"), 0) + 1
         by_stage[_sel(j, "stage")] = by_stage.get(_sel(j, "stage"), 0) + 1
 
-    print("# worklane (my work)")
+    print(f"# worklane (my work) — {len(jobs)} rows")
     for w in WORKLANE:
         if by_lane.get(w):
             print(f"  {w:14s} {by_lane[w]}")
@@ -318,35 +297,37 @@ def cmd_status() -> int:
             print(f"  {s:14s} {by_stage[s]}")
 
     print("\n# recent activity")
-    for e in n.query_recent_events(10):
-        p = e["properties"]
-        ts = (p.get("Timestamp", {}).get("date") or {}).get("start", "?")
+    events = n.query_all("activity_log")
+    events.sort(key=lambda e: (e["properties"].get("Timestamp", {}).get("date") or {}).get("start", ""),
+                reverse=True)
+    for e in events[:10]:
+        ts = (e["properties"].get("Timestamp", {}).get("date") or {}).get("start", "?")
         print(f"  {ts}  [{_sel(e, 'Event type')}/{_sel(e, 'Agent')}] {_title(e, 'Summary')}")
     return 0
 
 
 def cmd_audit() -> int:
-    """Hygiene check. Flags only — never mutates. Mirrors tracker.md."""
+    """Hygiene check. Flags only — never mutates. Mirrors .claude/agents/tracker.md."""
     n = _connect()
     if n is None:
         return 2
     findings: list[str] = []
-    for j in n.query_jobs():
-        name = f"{_text(j, 'Company') or '?'} / {_title(j, 'Title') or '?'}"
-        errs = validate_job_props({
-            "Title": _title(j, "Title"),
-            "Company": _text(j, "Company"),
-            "worklane": _sel(j, "worklane"),
-            "stage": _sel(j, "stage"),
-            "Stable ID": _text(j, "Stable ID"),
-            "Source": _sel(j, "Source"),
-            "submit_method": _sel(j, "submit_method"),
-            "dismiss_reason": _sel(j, "dismiss_reason"),
-            "closed_reason": _sel(j, "closed_reason"),
-        })
-        findings += [f"{name}: {e}" for e in errs]
-        if _sel(j, "worklane") in ("discovered", "proposed") and not _sel(j, "submit_method"):
+    for j in n.query_all("jobs"):
+        props = _job_props(j)
+        name = f"{props['Company'] or '?'} / {props['Title'] or '?'}"
+        findings += [f"{name}: {e}" for e in validate_job_props(props)]
+        if props["worklane"] in ("discovered", "proposed") and not props["submit_method"]:
             findings.append(f"{name}: submit_method missing — applicator cannot route it")
+
+    for e in n.query_all("activity_log"):
+        props = {
+            "Summary": _title(e, "Summary"),
+            "Timestamp": (e["properties"].get("Timestamp", {}).get("date") or {}).get("start", ""),
+            "Event type": _sel(e, "Event type"),
+            "Agent": _sel(e, "Agent"),
+            "From → To": _text(e, "From → To"),
+        }
+        findings += [f"event {props['Summary'] or '?'}: {x}" for x in validate_event_props(props)]
 
     if not findings:
         print("OK  no hygiene issues found")
@@ -357,6 +338,24 @@ def cmd_audit() -> int:
     if len(findings) > 40:
         print(f"  ... {len(findings) - 40} more")
     return 1
+
+
+def cmd_export(argv: list[str]) -> int:
+    """Full dump. Remote state cannot be backed up by copying files."""
+    n = _connect()
+    if n is None:
+        return 2
+    out = Path(argv[0]) if argv else ROOT / "data" / "backups" / f"notion-{date.today().isoformat()}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "exported_at": now_iso(),
+        "contract_version": _C["contractVersion"],
+        "databases": {name: n.query_all(name) for name in ("jobs", "activity_log", "contacts")},
+    }
+    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    counts = " · ".join(f"{k}={len(v)}" for k, v in payload["databases"].items())
+    print(f"exported {counts} -> {out}")
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -372,6 +371,8 @@ def main(argv: list[str]) -> int:
         return cmd_status()
     if cmd == "audit":
         return cmd_audit()
+    if cmd == "export":
+        return cmd_export(rest)
     print(f"unknown command: {cmd}", file=sys.stderr)
     return 2
 
