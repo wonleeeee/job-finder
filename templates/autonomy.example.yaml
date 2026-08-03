@@ -1,0 +1,56 @@
+# 자율성 정책 — 되돌릴 수 없는 행동을 얼마나 위임할지
+#
+# data/autonomy.yaml 로 복사해서 쓴다. (data/ 는 gitignore)
+# 기본값은 언제나 안전한 쪽이다. 신뢰가 쌓이면 사용자가 직접 올린다.
+
+# ── 파이프라인 단계별 ────────────────────────────────────────
+discover:     auto        # 공고 발굴 — 항상 무인
+propose:      weekly      # 브리핑 주기: daily | weekly | biweekly
+approve:      user        # ⛔ 절대 자동화하지 않음. 승인 게이트의 존재 이유
+tailor:       auto        # 승인되면 즉시 무인 튜닝
+
+submit:       confirm     # ★ manual | confirm | delegated
+                          #   manual    키트까지만. 제출은 언제나 사람
+                          #   confirm   폼을 다 채우고 제출 직전 확인 요청 (기본)
+                          #   delegated 승인 시점에 제출까지 위임. 완전 무인
+
+email_reply:  confirm     # draft-only | confirm | delegated
+schedule:     confirm     # 면접 일정 회신
+terminal:     user        # 오퍼/탈락/철회 전이는 항상 사람
+
+# ── 브리핑 ───────────────────────────────────────────────────
+brief:
+  day: monday
+  hour: 8
+  max_proposals: 10       # 한 브리핑에 올릴 신규 후보 상한
+                          # 이걸 넘기면 사용자의 10분이 깨진다
+
+# ── 스윕 ─────────────────────────────────────────────────────
+sweep:
+  hour: 3
+  max_raw_candidates: 30  # 세션당 원시 후보 상한
+  min_score: 40           # 이 아래는 저장하지 않는다
+  discovered_ttl_days: 30 # 승격 안 되면 정리 (Stable ID만 남김)
+
+# ── 정체 판정 ────────────────────────────────────────────────
+stale:
+  followup_days: 10       # 무응답 며칠 후 후속 제안
+  ghost_days: 14          # 무응답 며칠 후 ghosted 제안 (자동 전이 아님)
+
+# ── 지원 폼 상용 답변 ────────────────────────────────────────
+# applicator 가 제출 키트의 "자주 묻는 질문" 표를 이걸로 채운다.
+# 매번 똑같이 묻는 것들이라 미리 채워두면 사용자의 3~5분이 진짜 3~5분에 끝난다.
+form_answers:
+  desired_salary: "협의 가능 — 시장 수준 기준"
+  earliest_start: "오퍼 수락 후 4주"
+  requires_sponsorship: false
+  willing_to_relocate: false
+  how_did_you_hear: "회사 채용 페이지"
+  reference_contact: ""
+
+# ── 백업 ─────────────────────────────────────────────────────
+backup:
+  path: ""                # 예: C:/Users/<you>/OneDrive/job-finder-backups
+                          # 개인 클라우드 동기화 폴더를 권장 —
+                          # 백업과 다기기 동기화가 동시에 해결된다
+  keep: 10

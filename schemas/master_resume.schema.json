@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://job-finder.local/schemas/master_resume.schema.json",
+  "title": "Master Resume",
+  "description": "Single source of truth for the user's career history. Tailored resumes are derived from this, never the other way around.",
+  "type": "object",
+  "required": ["meta", "basics", "experience"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["version", "updated_at"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "schema_version": { "type": "string", "default": "1.0.0" },
+        "language": { "type": "string", "default": "en", "enum": ["en", "ko"] }
+      }
+    },
+
+    "basics": {
+      "type": "object",
+      "required": ["name", "email"],
+      "properties": {
+        "name": { "type": "string" },
+        "name_localized": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "e.g., { \"ko\": \"이원석\" }"
+        },
+        "headline": { "type": "string", "description": "One-line professional positioning, e.g. 'Senior Backend Engineer • Distributed Systems'." },
+        "summary": { "type": "string", "description": "2-4 sentence narrative. Tailor will rewrite per JD." },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "city": { "type": "string" },
+            "region": { "type": "string" },
+            "country": { "type": "string" },
+            "remote_ok": { "type": "boolean", "default": true },
+            "willing_to_relocate": { "type": "boolean", "default": false }
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "url"],
+            "properties": {
+              "label": { "type": "string", "examples": ["LinkedIn", "GitHub", "Portfolio"] },
+              "url": { "type": "string", "format": "uri" }
+            }
+          }
+        },
+        "work_authorization": {
+          "type": "array",
+          "items": { "type": "string", "examples": ["US-Citizen", "KR-Citizen", "EU-Blue-Card", "Requires-Sponsorship"] }
+        }
+      }
+    },
+
+    "preferences": {
+      "type": "object",
+      "description": "Used by Job Hunter to filter postings. Not rendered on the resume.",
+      "properties": {
+        "target_titles": { "type": "array", "items": { "type": "string" } },
+        "target_levels": { "type": "array", "items": { "type": "string", "examples": ["IC5", "Staff", "Senior", "Manager"] } },
+        "target_locations": { "type": "array", "items": { "type": "string" } },
+        "min_salary_usd": { "type": "number" },
+        "company_size": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["seed", "series-a-b", "growth", "public", "faang"] }
+        },
+        "exclude_companies": { "type": "array", "items": { "type": "string" } },
+        "exclude_industries": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "experience": {
+      "type": "array",
+      "description": "Reverse-chronological work history. Use bullets liberally — Tailor will pick a subset.",
+      "items": {
+        "type": "object",
+        "required": ["id", "company", "role", "start_date", "bullets"],
+        "properties": {
+          "id": { "type": "string", "description": "Stable slug, e.g. 'acme-2022-senior-eng'." },
+          "company": { "type": "string" },
+          "company_context": { "type": "string", "description": "One line, e.g. 'B2B SaaS, ~500 employees, Series D'." },
+          "role": { "type": "string" },
+          "team": { "type": "string" },
+          "location": { "type": "string" },
+          "remote": { "type": "boolean" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": ["string", "null"], "format": "date", "description": "null = current." },
+          "tech": { "type": "array", "items": { "type": "string" } },
+          "bullets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "text"],
+              "properties": {
+                "id": { "type": "string", "description": "Stable id so Tailor can reference and reorder." },
+                "text": { "type": "string", "description": "Action-verb led, ideally with metric. STAR-compressed." },
+                "tags": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Free-form, e.g. ['ml', 'leadership', 'cost-savings', 'mentoring']. Tailor matches to JD."
+                },
+                "metrics": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": { "type": "string", "examples": ["latency_p99", "users_impacted", "$_saved_yr"] },
+                      "value": { "type": ["number", "string"] },
+                      "unit": { "type": "string" }
+                    }
+                  }
+                },
+                "evidence": { "type": "string", "description": "Private link/doc/PR. Never rendered." },
+                "weight": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Default importance hint for Tailor." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "summary"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "summary": { "type": "string" },
+          "role": { "type": "string" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": ["string", "null"], "format": "date" },
+          "tech": { "type": "array", "items": { "type": "string" } },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "highlights": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "education": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["institution", "degree"],
+        "properties": {
+          "institution": { "type": "string" },
+          "degree": { "type": "string" },
+          "field": { "type": "string" },
+          "start_date": { "type": "string", "format": "date" },
+          "end_date": { "type": ["string", "null"], "format": "date" },
+          "gpa": { "type": "string" },
+          "highlights": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "skills": {
+      "type": "object",
+      "description": "Grouped by category. Tailor selects/orders per JD.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name"],
+          "properties": {
+            "name": { "type": "string" },
+            "level": { "type": "string", "enum": ["familiar", "proficient", "expert"] },
+            "years": { "type": "number" },
+            "last_used": { "type": "string", "format": "date" }
+          }
+        }
+      }
+    },
+
+    "certifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "issuer"],
+        "properties": {
+          "name": { "type": "string" },
+          "issuer": { "type": "string" },
+          "issued": { "type": "string", "format": "date" },
+          "expires": { "type": ["string", "null"], "format": "date" },
+          "credential_url": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+
+    "publications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "title": { "type": "string" },
+          "venue": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "url": { "type": "string", "format": "uri" },
+          "authors": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+
+    "languages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "proficiency"],
+        "properties": {
+          "name": { "type": "string" },
+          "proficiency": { "type": "string", "enum": ["basic", "conversational", "professional", "fluent", "native"] }
+        }
+      }
+    },
+
+    "private_notes": {
+      "type": "object",
+      "description": "Never rendered. Used by Interview Coach and Tailor for context.",
+      "properties": {
+        "career_narrative": { "type": "string", "description": "Why each move, what you optimized for." },
+        "strengths": { "type": "array", "items": { "type": "string" } },
+        "gaps_to_address": { "type": "array", "items": { "type": "string" } },
+        "salary_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "company": { "type": "string" },
+              "role": { "type": "string" },
+              "base_usd": { "type": "number" },
+              "total_comp_usd": { "type": "number" },
+              "year": { "type": "integer" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

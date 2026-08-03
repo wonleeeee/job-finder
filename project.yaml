@@ -1,0 +1,99 @@
+# AI Hub 매니페스트 — 허브가 이 프로젝트를 설치·점검·업데이트할 때 읽는다.
+apiVersion: 2
+name: job-finder
+displayName: 이직 비서
+version: 0.1.0
+description: >
+  이직 준비의 전 과정을 AI가 무인으로 굴리고, 사람은 사실 제공·승인·
+  대리 제출·전략 판단 네 가지에만 개입하는 개인 비서.
+author: wonleeeee
+repo: https://github.com/wonleeeee/job-finder
+license: MIT
+
+# ── 어떻게 조작하는가 ────────────────────────────────────────
+interface:
+  mode: agents            # agents | commands | both
+  agents:
+    - name: resume-curator
+      summary: 마스터 이력서 관리 (유일한 writer)
+    - name: job-hunter
+      summary: 공고 발굴·필터·스코어링 → discovered 적재
+    - name: briefer
+      summary: 주간 브리핑 발행 · 승인 요청 · proposed 승격
+    - name: resume-tailor
+      summary: 승인 건에 대해 JD 맞춤 이력서 생성
+    - name: applicator
+      summary: 지원 제출 · 제출 키트 생성 · needs_human 인계
+    - name: interview-coach
+      summary: 면접 일정 조율 · D-3 프렙 문서 생성
+    - name: tracker
+      summary: 파이프라인 상태 · 이벤트 로그 · 데이터 계약 소유
+  commands:
+    - name: brief
+      summary: 주간 브리핑을 지금 생성
+    - name: approve
+      summary: 승인 대기 건을 대화로 처리
+    - name: backup
+      summary: data/ 스냅샷을 지정 경로에 저장
+    - name: doctor
+      summary: 설정·의존성·데이터 위생 점검
+
+# ── 상태를 어디에 두는가 ─────────────────────────────────────
+state:
+  - id: master-resume
+    class: local
+    kind: local-file
+    path: data/master_resume.json
+    schema: schemas/master_resume.schema.json
+    versionField: meta.schema_version
+    seed: templates/master_resume.example.json
+    validate: python3 scripts/validate_resume.py
+
+  - id: autonomy
+    class: local
+    kind: local-file
+    path: data/autonomy.yaml
+    seed: templates/autonomy.example.yaml
+
+  - id: pipeline
+    class: remote
+    kind: notion
+    pointer: data/notion_databases.json
+    contract: python3 scripts/notion_tracker.py contract
+    databases: [jobs, activity_log, contacts]
+    provision: hooks/provision.md
+
+  - id: artifacts
+    class: local
+    paths:
+      - data/tailored/
+      - data/docs/
+      - data/backups/
+
+# ── 프라이버시 ───────────────────────────────────────────────
+privacy:
+  mode: gitignore          # gitignore | none   (git-crypt 는 폐기 — DESIGN.md §13)
+  rule: "개인적인 것은 예외 없이 data/ 안에 둔다"
+  ignored: ["data/"]
+  guard: scripts/git-hooks/pre-commit
+
+# ── 요구사항 ─────────────────────────────────────────────────
+requires:
+  hub: ">=2.0.0"
+  mcp:
+    required: [notion]
+    optional: [gmail, google-calendar]
+  bin: [python3]
+  env: []                  # NOTION_TOKEN 은 헤드리스 cron 실행 시에만 (선택)
+  profile: [full_name, location, work_authorization]
+
+# ── 주기 실행 (허브가 예약 에이전트로 등록) ──────────────────
+schedules:
+  - id: daily-sweep
+    cron: "0 3 * * *"
+    agent: job-hunter
+    silent: true
+  - id: weekly-brief
+    cron: "0 8 * * 1"
+    agent: briefer
+    silent: false

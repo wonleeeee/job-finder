@@ -1,0 +1,118 @@
+{
+  "meta": {
+    "version": 1,
+    "updated_at": "2026-01-01T00:00:00Z",
+    "schema_version": "1.0.0",
+    "language": "en"
+  },
+
+  "basics": {
+    "name": "Your Name",
+    "headline": "Senior Backend Engineer • Distributed Systems",
+    "summary": "예시 데이터입니다. resume-curator 와 함께 이 파일을 실제 경력으로 채우세요. 2~4문장으로 당신이 무엇을 하는 사람인지 서술합니다. Tailor 가 JD마다 이 문장을 다시 씁니다.",
+    "email": "you@example.com",
+    "phone": "",
+    "location": {
+      "city": "Seoul",
+      "country": "KR",
+      "remote_ok": true,
+      "willing_to_relocate": false
+    },
+    "links": [
+      { "label": "GitHub", "url": "https://github.com/your-handle" },
+      { "label": "LinkedIn", "url": "https://www.linkedin.com/in/your-handle" }
+    ],
+    "work_authorization": ["KR-Citizen"]
+  },
+
+  "preferences": {
+    "target_titles": ["Senior Backend Engineer", "Platform Engineer"],
+    "target_levels": ["Senior"],
+    "target_locations": ["Remote (KR)", "Seoul"],
+    "min_salary_usd": 100000,
+    "company_size": ["series-a-b", "growth"],
+    "exclude_companies": [],
+    "exclude_industries": ["gambling"]
+  },
+
+  "experience": [
+    {
+      "id": "example-co-2023-senior",
+      "company": "Example Co",
+      "company_context": "B2B 데이터 플랫폼 · 직원 ~200명 · Series B",
+      "role": "Senior Backend Engineer",
+      "team": "Ingest Platform",
+      "location": "Seoul",
+      "remote": true,
+      "start_date": "2023-03-01",
+      "end_date": null,
+      "tech": ["Go", "Kafka", "PostgreSQL", "Kubernetes"],
+      "bullets": [
+        {
+          "id": "example-ingest-rewrite",
+          "text": "수집 파이프라인을 재작성해 p99 지연을 1.2s에서 180ms로 낮추고 연 $480k 컴퓨트 비용 절감.",
+          "tags": ["performance", "cost-savings", "go", "kafka"],
+          "metrics": [
+            { "label": "latency_p99_before", "value": 1200, "unit": "ms" },
+            { "label": "latency_p99_after", "value": 180, "unit": "ms" },
+            { "label": "cost_saved_yr", "value": 480000, "unit": "USD" }
+          ],
+          "evidence": "비공개 링크 — 설계 문서나 PR. 렌더링되지 않음.",
+          "weight": 0.95
+        },
+        {
+          "id": "example-oncall-reliability",
+          "text": "온콜 런북과 알림 정리로 야간 호출을 주 12건에서 3건으로 감소.",
+          "tags": ["reliability", "leadership"],
+          "metrics": [
+            { "label": "pages_per_week_before", "value": 12 },
+            { "label": "pages_per_week_after", "value": 3 }
+          ],
+          "weight": 0.7
+        },
+        {
+          "id": "example-draft-metric-needed",
+          "text": "신규 입사자 온보딩 문서를 정비함.",
+          "tags": ["mentoring", "draft-needs-metric"],
+          "metrics": [],
+          "weight": 0.3
+        }
+      ]
+    }
+  ],
+
+  "skills": {
+    "languages": [
+      { "name": "Go", "level": "expert", "years": 5, "last_used": "2026-01-01" },
+      { "name": "Python", "level": "proficient", "years": 7, "last_used": "2026-01-01" }
+    ],
+    "infrastructure": [
+      { "name": "Kubernetes", "level": "proficient", "years": 4, "last_used": "2026-01-01" },
+      { "name": "PostgreSQL", "level": "expert", "years": 8, "last_used": "2026-01-01" }
+    ]
+  },
+
+  "education": [
+    {
+      "institution": "Example University",
+      "degree": "B.S.",
+      "field": "Computer Science",
+      "start_date": "2013-03-01",
+      "end_date": "2017-02-01"
+    }
+  ],
+
+  "languages": [
+    { "name": "Korean", "proficiency": "native" },
+    { "name": "English", "proficiency": "professional" }
+  ],
+
+  "private_notes": {
+    "career_narrative": "렌더링되지 않습니다. 왜 각 이직을 했고 무엇을 최적화했는지 서술하세요. interview-coach 가 '왜 이직하려 하나' 류 질문의 답을 여기서 만듭니다.",
+    "strengths": ["예: 대용량 처리 시스템 설계", "예: 장애 대응"],
+    "gaps_to_address": [
+      "예: 2020년 이전 성과에 수치가 없음",
+      "예: 팀 리드 경험을 정량화하지 못함"
+    ]
+  }
+}
