@@ -1,0 +1,38 @@
+# ⚠️ 2026-10-21 부터 이 YAML 큐는 Notion "Outreach Queue" DB 로 대체됐다. 복사해 쓰지 않는다.
+#    아래는 필드 레퍼런스다 — 각 키가 DB 속성(Contact · Job · Angle · Kind · Status · Korean affiliated ·
+#    Mode snapshot · Proposed · Sent · Next touch · Replied · Notes · Queue UID)에 1:1 대응하고,
+#    draft 는 행 본문, sent_log 는 Sent 날짜가 범위 안인 행의 수다. 속성표: hooks/provision.md §9.
+#
+# 아웃리치 주간 큐 (구 형식)
+#
+# 상태 흐름:  proposed → approved → sent → accepted → replied
+#                          └→ blocked        └→ no_response (후속 1회 후 7일)
+# 승인은 건별이다. briefer 가 proposed 를 브리핑에 올리고, 사용자가 approved 로 바꾼다.
+
+week_of: 2026-10-20
+mode_snapshot: confirm          # 실행 시점의 outreach.mode — 사후 감사용
+
+items:
+  - id: oq-001
+    contact_uid: 0              # Contacts.Contact UID
+    contact_name: "Jane Doe"
+    contact_role: Hiring Manager  # Recruiter | Hiring Manager | Engineer | Referrer
+    company: "Example Co"
+    linkedin: "https://www.linkedin.com/in/example/"
+    job_uid: 0                  # Jobs.Job UID
+    angle: posting              # posting | korean | alumni | domain | mutual
+    korean_affiliated: false
+    message_kind: A             # A 연결 노트 | B 본 메시지 | C 후속
+    draft: "<Outreach Queue 행 본문>"   # 구: 로컬 drafts/<contact-uid>-<job-uid>.md
+    status: proposed
+    proposed_at: 2026-10-20
+    approved_at:
+    sent_at:
+    accepted_at:
+    replied_at:
+    next_touch:                 # sent_at + 7일
+    notes: ""
+
+sent_log:                       # 상한 계산용. 날짜별 발송 수 (sent 상태 전이 시 추가)
+  - date: 2026-10-20
+    count: 0

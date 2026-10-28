@@ -1,7 +1,7 @@
 # 이직 비서 (job_finder) — 설계 문서
 
-> **상태**: 확정 (v2)
-> **최종 갱신**: 2026-08-03
+> **상태**: 확정 (v3 — 개인 데이터 Notion 이전)
+> **최종 갱신**: 2026-10-21
 > **레포**: https://github.com/wonleeeee/job-finder
 > **관련 문서**: 운영 규칙은 [CLAUDE.md](CLAUDE.md) · 허브 설계는 [all-in-one](https://github.com/wonleeeee/all-in-one)
 
@@ -184,13 +184,14 @@ AI는 사용자가 자고 있을 때 일한다. 사용자는 편할 때 응답�
 
 | 에이전트 | 소유(쓰기 권한) | 담당 목표 | 자율성 |
 |---|---|---|---|
-| **resume-curator** | `data/master_resume.json` — **유일 writer** | ① | 대화형 (사람 필수) |
-| **job-hunter** | Jobs 신규행 (`discovered`) | ② | 완전 무인 |
+| **resume-curator** | Notion **Resume Versions** (새 버전 행 + `Current`) — **유일 writer** | ① | 대화형 (사람 필수) |
+| **job-hunter** | Jobs 신규행 (`discovered`), 스윕 리포트 → Documents `sweep` | ② | 완전 무인 |
 | **briefer** | 주간 브리핑, `proposed` 승격 | ② | 무인 생성 → 사람 확인 |
-| **resume-tailor** | `data/tailored/<id>/` | ③ | 승인 후 무인 |
-| **applicator** | 제출 · 제출키트 · `submitted`/`needs_human` | ④ | 정책에 따름 (§7) |
-| **interview-coach** | `data/docs/<company>/`, 일정 조율 초안 | ⑤ | 초안 무인, 발송은 확인 |
-| **tracker** | Jobs 상태 · Activity Log · 데이터 계약 | 횡단 | 무인 (터미널 전이 제외) |
+| **resume-tailor** | Notion **Tailored** 행 (본문 resume.md · 하위 페이지 · 첨부) | ③ | 승인 후 무인 |
+| **applicator** | 제출 · 제출키트(Tailored 하위 페이지 `submit-kit`) · `submitted`/`needs_human` | ④ | 정책에 따름 (§7) |
+| **outreach** | Contacts · **Outreach Queue** 행 · Outreach 이벤트 | ③' | 건별 확인 (기본 `confirm`) |
+| **interview-coach** | Notion **Documents** 행 (research · interview-prep · negotiation · debrief), 일정 조율 초안 | ⑤ | 초안 무인, 발송은 확인 |
+| **tracker** | Jobs 상태 · Activity Log · 데이터 계약 (DB 8개 + Settings 의 위생) | 횡단 | 무인 (터미널 전이 제외) |
 
 ### briefer를 두는 이유
 
@@ -258,9 +259,10 @@ AI는 사용자가 자고 있을 때 일한다. 사용자는 편할 때 응답�
                               ▼
   ┌─ 승인 직후 ── 무인, 수 분 내 ─────────────────────────────────────┐
   │                                                                    │
-  │  resume-tailor → data/tailored/<id>/                               │
-  │                  resume.json · resume.md · resume.pdf              │
-  │                  tailoring_notes.md                                │
+  │  resume-tailor → Notion Tailored 행 (<stable-id>)                  │
+  │                  본문 resume.md · 첨부 resume.json / PDF           │
+  │                  하위 페이지 cover-letter · tailoring_notes        │
+  │                  (작업은 data/cache/tailored/<id>/ 에서)           │
   │                                                                    │
   │  applicator    → submit_method 판정                                │
   │       auto ────► 폼 채움 → 정책에 따라 제출 또는 확인 요청        │
@@ -284,7 +286,7 @@ AI는 사용자가 자고 있을 때 일한다. 사용자는 편할 때 응답�
 되돌릴 수 없는 행동을 얼마나 위임할지는 사람마다, 시기마다 다르다. 코드에 박지 않고 설정으로 뺀다.
 
 ```yaml
-# data/autonomy.yaml   (gitignore — 개인 설정)
+# Notion Settings 페이지의 ```yaml 블록 (정본) — /sync 가 data/cache/autonomy.yaml 로 내려준다
 
 discover:      auto        # 항상 무인
 propose:       weekly      # daily | weekly | biweekly
@@ -315,7 +317,7 @@ terminal:      user        # 오퍼/탈락/철회 전이는 항상 사람
 
 ## 8. 데이터와 프라이버시
 
-### 데이터 3등급
+### 데이터 등급 (2026-10-21 개정)
 
 ```
 ┌─ ⚙️ engine ─────────────────────────────────────────────────────────┐
@@ -326,37 +328,48 @@ terminal:      user        # 오퍼/탈락/철회 전이는 항상 사람
 │  취급: 평문 커밋. git pull 로 업데이트되는 대상. 포크·PR 가능.     │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌─ 🔒 local ─────────────────────────────────────────────────────────┐
-│  data/ 아래 전부                                                    │
-│    master_resume.json          내 경력 전체                         │
-│    notion_databases.json       내 Notion DB 포인터                  │
-│    autonomy.yaml               내 자율성 설정                       │
-│    tailored/<stable-id>/       공고별 튜닝 이력서                   │
-│    docs/<company>/             면접 프렙 · 연봉 전략 · 회사 리서치  │
-│    backups/                    스냅샷                               │
+┌─ ☁️ remote ── Notion = 개인 데이터 전부 ───────────────────────────┐
+│  워크스페이스 페이지 "Career" 아래 DB 8개 + 페이지 1개              │
+│    Jobs · Activity Log · Contacts · Target Companies   파이프라인   │
+│    Resume Versions   마스터 이력서 — Current 행의 첨부 JSON 이 정본 │
+│    Tailored          공고별 튜닝본 (행=stable-id, 본문 resume.md)   │
+│    Documents         프렙 · 리서치 · 협상 · 스윕 리포트 · 과정 문서 │
+│    Outreach Queue    LinkedIn 아웃리치 큐 (본문=메시지 초안)        │
+│    Settings (페이지) 자율성 정책 — ```yaml 블록 하나                │
 │                                                                     │
 │  성격: 전부 개인정보. 일부는 매우 민감(연봉 협상 전략, 재직사 언급 │
-│        금지 사항, 미공개 성과 수치).                                │
-│  취급: gitignore. 로컬 기기에만 존재. 절대 커밋되지 않음.          │
+│        금지 사항, 미공개 성과 수치). 버전 이력은 Notion 이 가진다.  │
+│  취급: MCP(OAuth)로만 접근. 파일이 아니다 — 백업은 복사가 아니라   │
+│        내려받기(hooks/notion-files.md)다.                           │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌─ ☁️ remote ────────────────────────────────────────────────────────┐
-│  Notion: Jobs · Activity Log · Contacts                             │
+┌─ 🔒 local ── 포인터뿐 ─────────────────────────────────────────────┐
+│  data/notion_databases.json    내 Notion DB·페이지 id               │
 │                                                                     │
-│  성격: 파이프라인 상태와 이벤트 로그. 로컬에 실체가 없다.          │
-│  취급: MCP(OAuth)로만 접근. 로컬에는 DB id 포인터만 있고            │
-│        그 포인터조차 data/ 안에 있어 커밋되지 않음.                 │
+│  성격: 유일한 개인 파일. 이것만 있으면 어느 기기에서든 복원된다.   │
+│  취급: gitignore. 포크한 사람은 hooks/provision.md 로 자기 것을    │
+│        만든다.                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─ ♻️ cache ── 재생성 가능 ──────────────────────────────────────────┐
+│  data/cache/master_resume.json   /sync 가 Resume Versions 에서 내림 │
+│  data/cache/autonomy.yaml        /sync 가 Settings 에서 추출        │
+│  data/cache/tailored/<id>/       resume-tailor 의 작업 사본         │
+│  .cache/h1b/                     DOL LCA · USCIS 공공 데이터 (470MB) │
+│                                                                     │
+│  성격: 지워도 잃는 것이 없다. 개인정보가 섞여 있으므로 gitignore.  │
+│  취급: 쓰기는 캐시로 가지 않는다. 정본에 쓰고 다시 내린다.         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 단일 규칙
 
-> **개인적인 것은 예외 없이 `data/` 안에 둔다.**
-> `.gitignore`는 `data/` 한 줄이면 끝난다.
+> **개인 데이터는 Notion 에, 로컬은 포인터와 캐시뿐.**
+> `.gitignore`는 `data/` · `.cache/` 두 줄이면 끝난다.
 
-예외 규칙이 없다는 것이 이 설계의 핵심이다. "이건 민감한가?"를 파일마다 판단할 필요가 없고, 판단을 틀려서 유출될 여지가 없다. 새 파일을 만들 때 던지는 질문은 하나뿐이다 — **"이게 나에 관한 것인가, 아니면 이 도구에 관한 것인가?"**
+예외 규칙이 없다는 것이 이 설계의 핵심이다. "이건 민감한가?"를 파일마다 판단할 필요가 없고, 판단을 틀려서 유출될 여지가 없다. 새 산출물을 만들 때 던지는 질문은 하나뿐이다 — **"이게 나에 관한 것인가, 아니면 이 도구에 관한 것인가?"** 나에 관한 것이면 Notion 의 DB 다섯 중 하나(Documents · Tailored · Resume Versions · Outreach Queue · Settings)로 간다. `data/` 에 새 파일을 만드는 것은 규칙 위반이다.
 
-이 때문에 `docs/`는 레포 루트가 아니라 `data/docs/`에 둔다. 면접 프렙과 연봉 전략 문서는 이 프로젝트에서 가장 민감한 축에 속한다.
+면접 프렙과 연봉 전략 문서는 이 프로젝트에서 가장 민감한 축에 속한다. Documents DB 의 `Type` 으로 분류되고 Jobs 행에 관계로 묶인다 — 회사 폴더를 뒤지는 대신 Jobs 행에서 "Documents" 를 연다.
 
 ### 비밀값 정책
 
@@ -377,36 +390,40 @@ terminal:      user        # 오퍼/탈락/철회 전이는 항상 사람
 ### 실수 방지 장치
 
 ```
- 1. .gitignore     data/ 한 줄
+ 1. .gitignore     data/ · .cache/
  2. pre-commit 훅  data/ 아래 경로가 스테이징되면 커밋 거부
  3. /doctor        `git ls-files data/` 가 비어 있는지 확인.
                    비어 있지 않으면 심각 경고 + 이력 정리 안내
+                   data/ 에 notion_databases.json 과 cache/ 외의 파일이 있으면
+                   경고 — Notion 으로 옮길 것 (규칙이 새는 첫 신호다)
  4. 에이전트 규칙  CLAUDE.md 불변식에 "data/ 내용을 커밋하거나
-                   외부로 전송하지 않는다" 명시
+                   외부로 전송하지 않는다", "data/ 에 새 파일을 만들지 않는다" 명시
+ 5. 쓰기 방향      캐시에만 쓰는 경로가 없다. 이력서는 새 버전 행, 정책은
+                   Settings 페이지. 캐시가 정본보다 새로운 상태가 생기지 않는다
 ```
 
 ### 백업과 다기기
 
-로컬 저장을 택한 대가로 **git이 백업 역할을 하지 않는다.** 명시적으로 처리한다.
+정본이 Notion 에 있으므로 **Notion 의 페이지 버전 이력이 1차 백업이다.** 마스터 이력서는 거기에 더해
+Resume Versions 행 하나가 버전 하나라서, 되돌리기는 `Current` 체크를 옮기는 것으로 끝난다.
 
 ```
  /backup
-   data/ 를 타임스탬프 아카이브로 묶어 사용자가 지정한 경로에 떨군다.
-   경로는 data/autonomy.yaml 의 backup.path 에 설정.
-   개인 클라우드 동기화 폴더(iCloud/Drive/Dropbox)를 지정하면
-   백업과 다기기 동기화가 동시에 해결된다.
+   1. /sync 로 캐시를 최신으로 맞춘다.
+   2. (선택) data/cache/ + Resume Versions Current 행의 첨부 4개를
+      타임스탬프 zip 으로 묶어 backup.path (Settings 의 backup 블록) 에 떨군다.
+   Notion 이 사라지는 경우에 대비한 오프라인 사본이다. 일상 백업이 아니다.
 
  다기기 사용
-   · 파이프라인 상태는 Notion에 있으므로 이미 모든 기기에서 공유된다.
-   · 로컬 자산(마스터 이력서·튜닝 산출물·프렙 문서)만 동기화가 필요하다.
-   · 권장: 프로젝트 디렉터리 자체를 개인 클라우드 동기화 폴더 안에 둔다.
-   · 이 경우 .gitignore 는 여전히 공개 레포로의 유출을 막아준다.
-     (동기화 폴더는 개인 계정이고, 레포는 공개 — 두 경계가 분리된다)
+   · git clone → Notion MCP 로그인 → data/notion_databases.json 복사(또는 provision)
+     → /sync.  세 단계면 어느 기기에서든 같은 상태다.
+   · 동기화할 로컬 자산이 없다. 클라우드 폴더에 프로젝트를 둘 이유도 사라졌다.
+   · 포인터 파일 하나만 기기 간에 옮기면 된다 (내용은 id 뿐이라 메신저로 보내도 된다).
 ```
 
 ### 이 레포는 공개해도 안전하다
 
-engine에는 개인정보가 없고 `data/`는 애초에 커밋되지 않으므로, 레포를 그대로 공개할 수 있다. 포크한 사람은 **키 배포나 복호화 없이** 즉시 쓸 수 있고, 설치 시 `hooks/provision.md`가 그 사람의 Notion에 DB를 새로 만들어준다.
+engine에는 개인정보가 없고 `data/`·`.cache/`는 애초에 커밋되지 않으므로, 레포를 그대로 공개할 수 있다. 포크한 사람은 **키 배포나 복호화 없이** 즉시 쓸 수 있고, 설치 시 `hooks/provision.md`가 그 사람의 Notion에 DB 8개와 Settings 페이지를 새로 만들어준다.
 
 ---
 
@@ -419,7 +436,7 @@ job_finder/                              ← 공개 레포. 전부 평문. 개�
 ├── CLAUDE.md                       오케스트레이터 지침 + 불변식
 ├── README.md
 ├── DESIGN.md                       이 문서
-├── .gitignore                      → data/  (한 줄)
+├── .gitignore                      → data/ · .cache/
 │
 ├── .claude/
 │   ├── agents/                     ★ 서브에이전트는 반드시 여기
@@ -428,48 +445,47 @@ job_finder/                              ← 공개 레포. 전부 평문. 개�
 │   │   ├── briefer.md
 │   │   ├── resume-tailor.md
 │   │   ├── applicator.md
+│   │   ├── outreach.md
 │   │   ├── interview-coach.md
 │   │   └── tracker.md
-│   └── commands/                   얇은 진입점 (/brief, /approve, /backup, /doctor)
+│   └── commands/                   얇은 진입점 (/sync, /brief, /approve, /outreach, /backup, /doctor)
 │
 ├── schemas/
-│   └── master_resume.schema.json   ⚙️ 데이터 계약
+│   ├── master_resume.schema.json   ⚙️ 마스터 이력서 스키마
+│   └── contract.json               ⚙️ Notion 계약 (어휘 · 불변식 · storage — 어디에 무엇이 사는지)
 │
 ├── scripts/                        ⚙️ 결정적 로직 — LLM이 매번 다르게
 │   ├── validate_resume.py             판단하면 안 되는 것들
 │   ├── notion_tracker.py              (계약 덤프 · stable id 생성 · 검증 · 감사)
+│   ├── h1b_sponsors.py                DOL LCA · USCIS 공공 데이터 (.cache/h1b/)
+│   ├── render/                        튜닝본 렌더 (html · cover letter · ATS 평문)
 │   └── git-hooks/pre-commit           data/ 커밋 차단 가드
 │
 ├── templates/                      ⚙️ 시드 · 예시 (가짜 데이터)
-│   ├── master_resume.example.json
-│   ├── autonomy.example.yaml
-│   └── company-docs/               회사 폴더 템플릿
+│   ├── master_resume.example.json  → Resume Versions 첫 행의 첨부로 올린다
+│   ├── autonomy.example.yaml       → Settings 페이지의 yaml 블록으로 올린다
+│   ├── company-docs/               Documents 행 본문 골격
+│   └── outreach/                   메시지 골격 · 큐 필드 레퍼런스
 │
 ├── hooks/
-│   ├── provision.md                설치 시 Notion DB 생성
+│   ├── provision.md                설치 시 Notion DB 8개 + Settings 생성
+│   ├── notion-files.md             첨부 업로드/다운로드 절차 (유일한 정본)
 │   ├── on_install.md
 │   ├── on_update.md
-│   └── migrate.md                  스키마 마이그레이션
+│   └── migrate.md                  스키마 · 계약 · 저장소 이전 이력
 │
-└── data/                           ← 🔒 통째로 gitignore. 여기만 지키면 된다.
+├── .cache/                         ← ♻️ gitignore. 공공 데이터 (h1b/). 지워도 된다.
+│
+└── data/                           ← 🔒 gitignore. 포인터 하나 + 캐시.
     ├── .gitkeep
-    ├── master_resume.json
-    ├── notion_databases.json
-    ├── autonomy.yaml
-    ├── tailored/
-    │   └── <stable-id>/
-    │       ├── resume.json
-    │       ├── resume.md
-    │       ├── resume.pdf
-    │       └── tailoring_notes.md
-    ├── docs/
-    │   └── <company>/
-    │       ├── README.md           상태 · 문서 인덱스 · 열린 질문
-    │       ├── jd.pdf
-    │       ├── interview-*.md
-    │       └── comp-negotiation.md
-    └── backups/
+    ├── notion_databases.json       유일한 개인 파일
+    └── cache/                      ♻️ /sync 가 채운다. 지워도 된다.
+        ├── master_resume.json      ← Resume Versions Current 행
+        ├── autonomy.yaml           ← Settings 페이지
+        └── tailored/<stable-id>/   ← Tailored 행 (작업 사본)
 ```
+
+개인 데이터의 실제 구조는 Notion 에 있다 — `schemas/contract.json` 의 `storage` 절과 `hooks/provision.md` 참조.
 
 ### `scripts/`를 표준에 두는 이유
 
@@ -596,7 +612,7 @@ job_finder/                              ← 공개 레포. 전부 평문. 개�
    발송 → 캘린더 등록 → Jobs.next_action 갱신
 
  면접 준비 (D-3 자동 착수)
-   data/docs/<company>/ 에 생성
+   Documents DB 에 행으로 생성 (Type · Company · Job 관계)
      ├─ 회사 리서치      제품 · 자금 · 최근 이슈 · 경쟁사
      ├─ 면접관 프로필    공개 정보 기반
      ├─ 예상 질문        면접 유형별 + 마스터에서 끌어온 STAR 스토리 카드
@@ -619,7 +635,8 @@ job_finder/                              ← 공개 레포. 전부 평문. 개�
 | **Calendar MCP** | 일정 대조 · 등록 | ⬜ | 일정 조율 초안만 |
 | **웹 검색 / fetch** | 공고 발굴 · 회사 리서치 | ✅ | 발굴 불가 |
 | **브라우저 자동화** | 지원 폼 작성 | ⬜ | 전부 `manual` 경로로 |
-| **python3** | 검증 · 계약 · stable id | ✅ | 계약 검증 불가 |
+| **python3** | 검증 · 계약 · stable id | ⬜ | 에이전트가 대행 (정밀도 하락) |
+| **curl** | Notion 첨부 업로드 · 다운로드 | ⬜ | 200 KiB 이하 텍스트는 MCP 로. 바이너리는 사용자가 UI 로 |
 
 Notion MCP만 필수다. 나머지는 없으면 **기능이 줄어들 뿐 깨지지 않는다** — 자동화 실패는 정상 경로라는 원칙 5가 여기에도 적용된다.
 
@@ -636,6 +653,7 @@ Notion MCP만 필수다. 나머지는 없으면 **기능이 줄어들 뿐 깨지
     project.yaml 작성 (허브 설치 가능하게)
     hooks/provision.md (포크 시 Notion DB 자동 생성)
     docs/ → data/docs/ 이동 · .gitignore 를 data/ 한 줄로
+      (2026-10-21 에 다시 Notion Documents DB 로 이전 — §8, §13)
     Notion DB id 이중 소스 정리
       agents/tracker.md 에 하드코딩된 id 제거, 포인터만 남김
 
@@ -679,9 +697,10 @@ Notion MCP만 필수다. 나머지는 없으면 **기능이 줄어들 뿐 깨지
 | 상태 모델 | worklane / stage **2축** | 승인 게이트를 놓을 자리가 필요 |
 | 승인 | 절대 자동화하지 않음 | 무인 구간을 나누는 유일한 경계 |
 | 제출 자율성 | 기본 `confirm`, 건별 `delegated` 선택 가능 | 되돌릴 수 없음 vs 무인화 목표의 절충 |
-| 개인정보 | **gitignore 로컬 + MCP 원격** | 아래 참조 |
+| 개인정보 | **Notion 정본 + 로컬 포인터·캐시** (2026-10-21, 이전엔 gitignore 로컬) | 아래 참조 |
 | 상태 저장소 | Notion (MCP) | **비동기 승인 UI**가 필요해서. DB가 필요해서가 아님 |
-| 에이전트 | 7개 (briefer 신설) | "요약본 보고"는 독립 역할이자 유일한 정기 접점 |
+| Notion 상태 컬럼 | **`Status` 단일축 공식화** (2026-10-21) | 2축은 계약 어휘로만. 아래 참조 |
+| 에이전트 | 8개 (briefer · outreach 신설) | "요약본 보고"는 독립 역할이자 유일한 정기 접점 |
 | 거부 처리 | 사유를 학습 신호로 재활용 | "점점 신경 쓰지 않아도 됨"의 메커니즘 |
 
 ### 폐기한 대안
@@ -702,10 +721,45 @@ Notion MCP만 필수다. 나머지는 없으면 **기능이 줄어들 뿐 깨지
    · 규칙이 한 줄로 줄었다 — "개인적인 것은 data/ 안에".
    · 레포에 개인정보가 아예 존재하지 않으므로 공개가 무조건 안전하다.
    · 포크 사용자는 복호화 없이 즉시 사용 가능하다.
-   · 잃은 것(다기기 동기화)은 §8의 백업·클라우드 폴더 전략으로 대체한다.
-     파이프라인 상태는 이미 Notion에 있어 다기기 공유가 된다.
+   · 잃은 것(다기기 동기화)은 2026-10-21 이후 Notion 정본으로 해결됐다 (아래).
 ```
 
 **단일 파일 파이프라인(`pipeline.json`)** — 초기 템플릿의 모델이었으나 폐기했다. 승인이 폰에서 비동기로 이뤄져야 한다는 요구를 로컬 JSON 파일로는 만족시킬 수 없다. Notion을 선택한 이유가 저장소 성능이 아니라 **UI**라는 점이 이 결정의 핵심이다.
 
-**Status 단일 축** — 승인 게이트를 표현할 수 없어 폐기. §4 참조.
+**Notion 에 worklane / stage 컬럼 추가** — contract v2 가 계획했으나 2026-10-21 에 적용하지 않기로 했다. 아래 "Status 단일축 공식화" 참조. 2축은 §4 의 사고 모델이자 계약 어휘로 남는다.
+
+### 2026-10-20 — 아웃바운드 아웃리치를 별도 에이전트로
+
+- **결정**: LinkedIn 에서 내가 먼저 연락하는 흐름을 `outreach` 에이전트로 분리한다. job-hunter(발굴)·applicator(제출)에 섞지 않는다.
+- **이유**: 세 가지가 다르다. (1) 대상이 공고가 아니라 사람이라 Contacts 가 주 테이블이다. (2) 사용자의 실제 계정·이름으로 나가는 말이라 승인 단위가 건별이어야 하고 volume 레인의 정책 승인을 쓸 수 없다. (3) 브라우저(Claude in Chrome)로 사용자 세션을 쓰므로 상한·시간대·약관 리스크를 한 곳에서 관리해야 한다.
+- **기본 모드 confirm**: Send 는 사람이 누른다. LinkedIn 약관이 자동화를 금지하므로 delegated 전환은 사용자가 위험을 알고 내리는 결정이다.
+- **성과 지표**: 발송 수가 아니라 답장률·리퍼럴 수. 공고당 따뜻한 사람 1명.
+- **계약 v3**: `Outreach Sent` · `Connection Accepted` · `Outreach Reply` 이벤트, `Outreach` 에이전트, `outreach_angle` 어휘. Contacts 스키마는 건드리지 않는다.
+
+### 2026-10-21 — 개인 데이터를 Notion 으로, 로컬은 포인터만
+
+- **결정**: `data/` 아래 있던 개인 데이터 전부(마스터 이력서·백업·튜닝본·문서·아웃리치 큐·자율성 정책)를
+  Notion 으로 옮긴다. 로컬에는 `data/notion_databases.json` 과 재생성 가능한 `data/cache/` 만 남는다.
+  DB 4개(Resume Versions · Tailored · Documents · Outreach Queue)와 Settings 페이지를 새로 만들었다.
+- **이유** (네 가지가 한꺼번에 터졌다):
+  1. **다기기** — 집 PC 와 회사 머신을 오가는데 로컬 자산은 어느 한쪽에만 있었다. 클라우드 폴더 동기화는
+     충돌과 지연을 만들었고, Notion 은 이미 모든 기기에서 보였다.
+  2. **엔진은 GitHub 에** — engine 은 `git pull` 로 갱신되는데 렌더 스크립트 사본이 `data/tailored/` 안에
+     흩어져 있었다. 데이터 폴더에 코드가 섞이면 업데이트가 닿지 않는다 (→ `scripts/render/` 로 모았으나, 개인 정보가 코드에
+     박혀 있어 2026-10-28 `data/render/` 로 되돌렸다. 범용화하면 다시 엔진으로 올린다).
+  3. **470 MB 공공 캐시가 `data/` 를 오염** — DOL LCA·USCIS 데이터는 개인정보가 아닌데 `data/h1b/` 에 있어
+     백업 zip 이 터지고 "data/ 는 전부 개인정보"라는 규칙이 거짓이 됐다 (→ `.cache/h1b/`).
+  4. **문서 난립** — `data/docs/` 에 회사 폴더와 날짜 붙은 스윕 리포트가 뒤섞여 Jobs 행에서 찾아갈 수 없었다.
+     Documents DB 의 `Type` + Job 관계가 그 자리를 대신한다.
+- **단일 원천의 이동**: 마스터 이력서의 정본은 Resume Versions 의 `Current` 행에 붙은 JSON 이다. 행 하나가
+  버전 하나이므로 `data/backups/` 가 필요 없다. 쓰기는 캐시로 가지 않는다 — resume-curator 가 새 행을 올린다.
+- **Status 단일축 공식화**: contract v2 가 계획한 Jobs 의 `worklane`·`stage` 컬럼을 **Notion 에 추가하지 않기로**
+  확정했다. 6개월간 단일 `Status` 로 운영했고 폰에서 상태를 바꾸는 데 컬럼 하나가 더 편했다.
+  2축은 계약(`schemas/contract.json`)의 어휘와 이 문서의 사고 모델로 남고, Notion 에 쓸 때는
+  Saved = discovered·proposed / Applying = tailored·ready·needs_human / Applied 이후 = submitted + stage 로 접는다.
+  세부(dismiss_reason · submit_method · lane)는 Notes·Payload 에 적는다. Sponsorship 은 5값, Activity Log 의
+  Event type·Agent 는 v3 옵션까지 추가됐다 (`hooks/migrate.md`).
+- **잃은 것**: 오프라인에서 이력서를 고칠 수 없다 (읽기는 캐시로 가능). curl 이 없는 환경에서 바이너리 첨부는
+  사용자가 올린다. 둘 다 "실패"가 아니라 "인계"로 처리한다 (원칙 5).
+- **롤백**: 이전 직전 zip `<백업 폴더>/job-finder-data-pre-notion-migration-2026-10-21.zip`.
+  이후의 변경은 Notion 첨부를 내려받고 페이지를 내보내면 복원된다 (`hooks/migrate.md`).

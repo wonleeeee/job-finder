@@ -3,6 +3,23 @@
 이 프로젝트에서 너는 **오케스트레이터**다. 직접 일하지 말고 적합한 서브에이전트로 위임한다.
 전체 설계는 [DESIGN.md](DESIGN.md)에 있다. 이 문서는 매 세션에 적용되는 운영 규칙이다.
 
+## 세션 시작 — `/sync` 먼저
+
+개인 데이터의 정본은 **Notion** 이다. 로컬 `data/` 에는 포인터(`notion_databases.json`)와
+재생성 가능한 캐시(`data/cache/`)뿐이다. 마스터 이력서나 자율성 정책이 필요한 세션은 **`/sync` 를 먼저 돈다.**
+
+```
+/sync
+  data/notion_databases.json 읽기
+  → Resume Versions 에서 Current=__YES__ 행 1개 → 첨부 JSON 을 data/cache/master_resume.json 으로
+  → Settings 페이지의 ```yaml 블록 → data/cache/autonomy.yaml 으로
+에이전트는 이후 data/cache/ 를 읽는다.
+쓰기는 캐시로 가지 않는다 — 이력서는 resume-curator 가 새 버전 행을 올리고, 정책은 Settings 페이지에서 고친다.
+Notion 에 닿지 못하면 캐시를 쓰고 그 사실을 말한다.
+```
+
+첨부를 올리고 내리는 기계적 절차는 `hooks/notion-files.md` 하나에만 적혀 있다.
+
 ## 목적
 
 사용자의 **주의(attention)를 아끼는 것**이 이 시스템의 최적화 대상이다.
@@ -32,6 +49,7 @@
 | 주간 브리핑, 승인 요청 정리, 현황 요약 | `briefer` |
 | JD 맞춤 이력서·커버레터 | `resume-tailor` |
 | 지원 제출, 제출 키트, 후속 메시지 | `applicator` |
+| LinkedIn 아웃바운드 — 사람 찾기, 연결 노트·메시지, 발송 준비, 답장 수집 | `outreach` |
 | 면접 준비, 일정 조율, 회사 리서치, 협상 근거 | `interview-coach` |
 | 상태 기록·조회, 이벤트 로깅, 퍼널·위생 점검 | `tracker` |
 
@@ -54,26 +72,43 @@ stage    (외부 진행)  lead ────────────────�
 - `dismissed`(지원 전 거부) ≠ `withdrawn`(지원 후 철회). 혼동 금지.
 - `rejected`(명시적 거절) ≠ `ghosted`(14일 무응답). 혼동하면 퍼널 통계가 오염된다.
 
+**Notion 에는 `Status` 단일 컬럼만 있다 (2026-10-21 공식화 — DESIGN.md §13).** 2축은 계약의 어휘이고,
+Notion 에 쓸 때는 이렇게 접는다:
+
+| Notion `Status` | worklane / stage |
+|---|---|
+| `Saved` | discovered · proposed (lead) |
+| `Applying` | tailored · ready · needs_human (lead) |
+| `Applied` `Phone Screen` `Tech Interview` `Onsite` `Offer` | submitted + applied · screening · interview · offer |
+| `Rejected` `Ghosted` `Withdrawn` | submitted + closed (closed_reason) — `Withdrawn` 에 Applied date 가 없으면 dismissed |
+
+세부 값(proposed 여부 · dismiss_reason · submit_method · lane)은 **Notes 와 Activity Log Payload** 에 적는다.
+
 ## 불변 규칙
 
-1. **마스터 이력서는 단일 원천.** `data/master_resume.json`의 writer는 `resume-curator` 뿐이다.
+1. **마스터 이력서는 단일 원천.** 정본은 Notion **Resume Versions** 의 `Current` 행에 붙은 JSON 이고,
+   writer 는 `resume-curator` 뿐이다 (새 버전 행을 올리는 방식). `data/cache/master_resume.json` 은 읽기 전용 사본이다.
    튜닝 이력서는 파생물이며 **절대 마스터로 역류하지 않는다.**
 2. **Stable ID는 신성하다.** `experience[].id` / `bullets[].id`는 한번 부여되면 재번호 금지.
    Tailor와 Tracker가 이 id로 "어떤 불릿이 오퍼로 이어졌나"를 추적한다.
 3. **Activity Log는 append-only.** 수정·삭제 금지. 정정은 이전 Event UID를 참조하는 새 `Note` 이벤트로.
-4. **외부 행동은 정책 범위에서만.** `data/autonomy.yaml`을 읽고 따른다. 기본은 확인 후 실행.
+4. **외부 행동은 정책 범위에서만.** 정책의 정본은 Notion **Settings** 페이지의 yaml 블록이고,
+   `/sync` 가 내려준 `data/cache/autonomy.yaml` 을 읽고 따른다. 기본은 확인 후 실행.
 5. **사실을 지어내지 않는다.** 마스터에 없는 수치·기술은 JD가 요구해도 넣지 않는다. 갭으로 보고할 뿐이다.
 6. **터미널 전이는 사람이 결정한다.** `accepted`/`rejected`/`ghosted`/`withdrawn` 자동 전이 금지. 제안만.
 
 ## 프라이버시 — 한 줄 규칙
 
-> **개인적인 것은 예외 없이 `data/` 안에 둔다.**
+> **개인 데이터는 Notion 에, 로컬은 포인터와 캐시뿐.**
 
-새 파일을 만들 때 던지는 질문은 하나뿐이다 — **"이게 나에 관한 것인가, 이 도구에 관한 것인가?"**
-나에 관한 것이면 `data/` 아래. 도구에 관한 것이면 레포 어디든.
+새 산출물을 만들 때 던지는 질문은 하나뿐이다 — **"이게 나에 관한 것인가, 이 도구에 관한 것인가?"**
+나에 관한 것이면 Notion (Documents · Tailored · Resume Versions · Outreach Queue · Settings 중 하나).
+도구에 관한 것이면 레포 어디든. **`data/` 에 새 파일을 만들지 않는다** — 거기엔
+`notion_databases.json` 과 `cache/` 만 있다 (`/doctor` 가 그 외의 파일을 경고한다).
 
-- `data/`는 통째로 gitignore다. 절대 커밋하지 않고 외부로 전송하지 않는다.
-- 면접 프렙·연봉 전략은 이 프로젝트에서 가장 민감하다. `data/docs/<company>/`에 둔다.
+- `data/`와 `.cache/`는 통째로 gitignore다. 절대 커밋하지 않고 외부로 전송하지 않는다.
+- 면접 프렙·연봉 전략은 이 프로젝트에서 가장 민감하다. Documents DB 행(Type · Company · Job 관계)으로 쓴다.
+- 캐시(`data/cache/`, `.cache/h1b/`)는 언제 지워도 된다. `/sync` 와 `h1b_sponsors.py fetch` 가 다시 만든다.
 - 비밀값은 **MCP(OAuth) 우선**. Notion·Gmail·Calendar는 토큰을 파일에 저장하지 않는다.
   MCP로 못 붙는 것만 `.env`(gitignore).
 
@@ -97,12 +132,16 @@ python3  →  py -3  →  python      순서로 시도하고,
 
 | 도구 | 명령 | 없을 때 |
 |---|---|---|
-| 이력서 검증 | `<PY> scripts/validate_resume.py [path]` | resume-curator 가 `schemas/master_resume.schema.json` 을 읽어 직접 대조 (required·type·enum) |
+| 정본 동기화 | `/sync` (Notion MCP) | 캐시 `data/cache/` 를 쓰고 그 사실을 말한다 |
+| 이력서 검증 | `<PY> scripts/validate_resume.py data/cache/master_resume.json` | resume-curator 가 `schemas/master_resume.schema.json` 을 읽어 직접 대조 (required·type·enum) |
 | 계약 확인 | `<PY> scripts/notion_tracker.py contract` | **`schemas/contract.json` 을 직접 읽는다.** 정본이 데이터라 손실이 없다 |
 | stable-id | `<PY> scripts/notion_tracker.py stable-id <co> <role> [date]` | `schemas/stable-id.md` 의 명세를 따라 직접 생성 |
 | 위생 감사 | `<PY> scripts/notion_tracker.py audit` | tracker 가 불변식을 수동 점검 — **놓칠 수 있다** |
 | 파이프라인 현황 | `<PY> scripts/notion_tracker.py status` | Notion MCP 로 직접 조회 (오히려 이쪽이 기본) |
 | 원격 백업 | `<PY> scripts/notion_tracker.py export` | 전체 덤프 불가. **원격 마이그레이션 전이라면 사용자에게 위험을 알린다** |
+| H-1B 스폰서 확인 | `<PY> scripts/h1b_sponsors.py lookup <회사>` / `rank --direct ...` (공공 데이터 캐시 `.cache/h1b/`) | WebSearch 로 USCIS Employer Data Hub·DOL LCA 데이터를 직접 찾아본다 — 느리고 놓칠 수 있다 |
+| 튜닝본 렌더 | `<PY> data/render/*.py <data/cache/tailored/<id>/>` (개인 스크립트 · 이 PC 에만) | resume-tailor 가 resume.md 를 직접 쓴다. PDF 는 사용자가 인쇄 |
+| Notion 첨부 | `curl` (`hooks/notion-files.md`) | 200 KiB 이하 텍스트는 `notion-create-attachment`. 바이너리는 사용자가 UI 로 올린다 |
 
 `contract` 와 `status` 는 대행에 손실이 없다. `audit` 과 `export` 는 손실이 있으니
 그 상태로 파괴적 작업(원격 스키마 변경)을 하지 않는다.
@@ -114,6 +153,8 @@ python3  →  py -3  →  python      순서로 시도하고,
 - Python ≥ 3.9, **stdlib만**. `jsonschema` 가 있으면 쓰고 없으면 내장 검증기로 떨어진다.
 - 날짜는 ISO-8601(`YYYY-MM-DD`) 또는 RFC 3339(`...T00:00:00Z`).
 - 스키마 변경은 `meta.schema_version`(semver)을 올리고 `hooks/migrate.md`에 마이그레이션 절차를 추가한다.
+- 어디에 무엇이 사는지는 `schemas/contract.json` 의 `storage` 절이 정본이다. 새 DB 를 만들면 거기와
+  `hooks/provision.md` 에 함께 적는다.
 - 새 에이전트는 `.claude/agents/<name>.md`에 frontmatter(`name`,`description`,`tools`,`model`)와 함께 둔다.
   `description`에 **언제 쓰는지**를 명확히 써야 라우팅이 된다.
 - 결정적이어야 하는 것(stable id 생성, enum 검증, 스키마 검증)은 **스크립트로 내린다.**

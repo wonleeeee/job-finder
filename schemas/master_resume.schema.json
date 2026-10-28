@@ -26,7 +26,7 @@
         "name_localized": {
           "type": "object",
           "additionalProperties": { "type": "string" },
-          "description": "e.g., { \"ko\": \"이원석\" }"
+          "description": "e.g., { \"ko\": \"홍길동\" }"
         },
         "headline": { "type": "string", "description": "One-line professional positioning, e.g. 'Senior Backend Engineer • Distributed Systems'." },
         "summary": { "type": "string", "description": "2-4 sentence narrative. Tailor will rewrite per JD." },
@@ -35,6 +35,7 @@
         "location": {
           "type": "object",
           "properties": {
+            "address": { "type": "string", "description": "Street line, e.g. 123 Main St NW. Printed on cover letters and (when present) the resume contact line." },
             "city": { "type": "string" },
             "region": { "type": "string" },
             "country": { "type": "string" },

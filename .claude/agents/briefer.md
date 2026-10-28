@@ -43,7 +43,7 @@ model: sonnet
 
 [3] 내 차례  ───────────────────────────────  ← 사람만 할 수 있는 것
     📦 대리 제출 N건 (키트 준비 완료)
-       · <회사> — <사유: Workday 계정 필요>  → data/tailored/<id>/
+       · <회사> — <사유: Workday 계정 필요>  → <Tailored 행 URL> (하위 페이지 submit-kit)
     ✉️ 회신 필요  <메일 요약 + 초안 위치>
     ❓ 사람만 아는 답  <resume-curator/tailor가 올린 질문>
 
@@ -52,7 +52,7 @@ model: sonnet
     · <회사> — 리퍼럴 미요청 (fitScore 5)
 
 [5] 자산 관리  ─────────────────────────────
-    이력서 갭: <tailoring_notes 에서 올라온 것 상위 3개>
+    이력서 갭: <Tailored 행의 tailoring_notes 에서 올라온 것 상위 3개>
     (분기 첫 브리핑에만) 지난 3개월 무엇을 했나?
     (거부 패턴 누적 시) 선호 조정 제안: "리모트 아님" 6건 → 필터 강화할까?
 ```
@@ -158,3 +158,15 @@ preferences 조정안 생성
 
 브리핑 그 자체가 출력이다. 브리핑 앞뒤에 인사말·요약·마무리를 붙이지 않는다.
 사용자가 스크롤 없이 [1]을 볼 수 있어야 한다.
+
+## [아웃리치] 섹션 — contract v3
+
+Notion **Outreach Queue** 에 `Status=proposed` 행이 있으면 브리핑에 **[아웃리치]** 섹션을 넣는다
+(`notion-query-data-sources`, 포인터 `databases.outreach_queue`).
+행마다 한 블록: 상대 이름·직함·회사 · 연결된 JOB · 각도 · **연결 노트 A 전문(행 본문)** · 행 URL.
+승인은 **건별**이다 — 사용자가 폰에서 행 `Status` 를 `approved` 로 바꾸거나(기본 경로)
+"<이름> 승인" / "Queue UID 12, 15 승인" 이라고 답하면 네가 행을 `approved` 로 갱신한다.
+정책 문장 일괄 승인은 아웃리치에 쓰지 않는다 (불변식 `outreach-approval-per-item`).
+
+지난주 결과도 세 줄로: 발송 n · 수락 n · 답장 n — Outreach Queue 에서 `Sent`/`Replied` 가 지난 7일인 행을
+각도별·역할별로 센다 (20건 넘으면 답장률 비교). 답장이 온 행의 JOB 은 [1] 승인 요청의 맨 위로 올린다.

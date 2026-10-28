@@ -1,90 +1,386 @@
 {
-  "$comment": "Tracker 데이터 계약 — 단일 원천. 스크립트와 에이전트가 모두 이 파일을 읽는다. 이전에는 notion_tracker.py 에 하드코딩돼 있었고, 그러면 Python 없이 동작할 때 계약을 알 방법이 없었다.",
-  "contractVersion": 1,
-
-  "axes": {
-    "$comment": "2축. 절대 한 컬럼으로 합치지 않는다. worklane=내 작업(자동화 구간), stage=외부 진행.",
-    "worklane": {
-      "description": "내가 이 건에 대해 무엇을 했나",
-      "values": ["discovered", "proposed", "dismissed", "tailored", "ready", "needs_human", "submitted"],
-      "flow": ["discovered", "proposed", "tailored", "ready", "submitted"],
-      "branches": {
-        "dismissed": "승인 전 사용자가 거부 (터미널)",
-        "needs_human": "자동 제출 불가 — 제출 키트로 인계"
-      },
-      "terminal": ["dismissed", "submitted"]
-    },
-    "stage": {
-      "description": "회사가 나를 어디까지 봤나",
-      "values": ["lead", "applied", "screening", "interview", "offer", "closed"],
-      "flow": ["lead", "applied", "screening", "interview", "offer", "closed"]
-    }
+ "$comment": "Tracker 데이터 계약 — 단일 원천. 스크립트와 에이전트가 모두 이 파일을 읽는다. 이전에는 notion_tracker.py 에 하드코딩돼 있었고, 그러면 Python 없이 동작할 때 계약을 알 방법이 없었다.",
+ "contractVersion": 3,
+ "axes": {
+  "$comment": "2축 — 계약의 어휘이자 사고 모델. Notion Jobs 에는 Status 단일 컬럼만 있다 (2026-10-21 공식화). 쓸 때는 storage.jobs.status_mapping 으로 접는다. 세부(dismiss_reason · submit_method · lane)는 Notes 와 Payload 에.",
+  "worklane": {
+   "description": "내가 이 건에 대해 무엇을 했나",
+   "values": [
+    "discovered",
+    "proposed",
+    "dismissed",
+    "tailored",
+    "ready",
+    "needs_human",
+    "submitted"
+   ],
+   "flow": [
+    "discovered",
+    "proposed",
+    "tailored",
+    "ready",
+    "submitted"
+   ],
+   "branches": {
+    "dismissed": "승인 전 사용자가 거부 (터미널)",
+    "needs_human": "자동 제출 불가 — 제출 키트로 인계"
+   },
+   "terminal": [
+    "dismissed",
+    "submitted"
+   ]
   },
-
-  "invariants": [
-    {
-      "id": "axis-coupling",
-      "rule": "stage != 'lead'  <=>  worklane == 'submitted'",
-      "why": "지원하지 않았는데 외부 진행이 있을 수 없고, 지원했는데 worklane 이 남아있을 수 없다"
-    },
-    {
-      "id": "dismiss-reason-required",
-      "rule": "worklane == 'dismissed'  =>  dismiss_reason 필수",
-      "why": "거부 사유가 선호 학습의 유일한 입력이다"
-    },
-    {
-      "id": "closed-reason-required",
-      "rule": "stage == 'closed'  =>  closed_reason 필수",
-      "why": "rejected 와 ghosted 를 뭉개면 퍼널 통계가 오염된다"
-    },
-    {
-      "id": "stage-change-needs-transition",
-      "rule": "Event type == 'Stage Change'  =>  'From → To' 필수",
-      "why": "이력 재구성이 불가능해진다"
-    }
-  ],
-
-  "enums": {
-    "closed_reason": {
-      "values": ["accepted", "rejected", "ghosted", "withdrawn"],
-      "notes": {
-        "rejected": "회사가 명시적으로 거절",
-        "ghosted": "마지막 기대 응답 후 14일 무응답",
-        "withdrawn": "지원 후 내가 철회 (지원 전 거부는 worklane=dismissed)"
-      }
-    },
-    "dismiss_reason": {
-      "$comment": "선호 학습 신호. 같은 사유 5건 누적 시 briefer 가 필터 조정을 제안한다. 목록을 늘리면 집계가 의미를 잃으므로 신중히.",
-      "values": ["location", "level", "comp", "domain", "company", "sponsorship", "stack", "no_response", "unspecified"]
-    },
-    "submit_method": {
-      "$comment": "저장 시점에 판정한다. 사용자가 '이건 내가 해야겠구나'를 미리 알아야 하기 때문.",
-      "values": ["auto-form", "assisted", "manual", "email"],
-      "hints": {
-        "auto-form": "greenhouse.io · lever.co · ashbyhq.com",
-        "manual": "myworkdayjobs.com · 계정 생성 요구 · 복잡한 로그인",
-        "email": "지원처가 이메일 주소"
-      }
-    },
-    "event_type": {
-      "values": ["Discovered", "Proposed", "Approved", "Dismissed", "Tailored", "Applied", "Recruiter Reach", "Stage Change", "Interview Scheduled", "Interview Done", "Note", "Reject", "Offer", "Withdraw"]
-    },
-    "agent": {
-      "values": ["Job Hunter", "Briefer", "Resume Tailor", "Applicator", "Interview Coach", "Tracker", "User"]
-    },
-    "level": { "values": ["Mid", "Senior", "Staff", "Unknown"] },
-    "sponsorship": { "values": ["Yes", "No", "Unknown"] },
-    "source": {
-      "values": ["LinkedIn", "Company site", "Referral", "Recruiter", "Indeed", "Wellfound", "Levels.fyi", "Other"]
-    }
-  },
-
-  "required": {
-    "job": ["Title", "Company", "worklane", "stage", "Stable ID", "Source"],
-    "event": ["Summary", "Timestamp", "Event type", "Agent"]
-  },
-
-  "ranges": {
-    "Match score": { "min": 0, "max": 100 }
+  "stage": {
+   "description": "회사가 나를 어디까지 봤나",
+   "values": [
+    "lead",
+    "applied",
+    "screening",
+    "interview",
+    "offer",
+    "closed"
+   ],
+   "flow": [
+    "lead",
+    "applied",
+    "screening",
+    "interview",
+    "offer",
+    "closed"
+   ]
   }
+ },
+ "invariants": [
+  {
+   "id": "axis-coupling",
+   "rule": "stage != 'lead'  <=>  worklane == 'submitted'",
+   "why": "지원하지 않았는데 외부 진행이 있을 수 없고, 지원했는데 worklane 이 남아있을 수 없다"
+  },
+  {
+   "id": "dismiss-reason-required",
+   "rule": "worklane == 'dismissed'  =>  dismiss_reason 필수",
+   "why": "거부 사유가 선호 학습의 유일한 입력이다"
+  },
+  {
+   "id": "closed-reason-required",
+   "rule": "stage == 'closed'  =>  closed_reason 필수",
+   "why": "rejected 와 ghosted 를 뭉개면 퍼널 통계가 오염된다"
+  },
+  {
+   "id": "stage-change-needs-transition",
+   "rule": "Event type == 'Stage Change'  =>  'From → To' 필수",
+   "why": "이력 재구성이 불가능해진다"
+  },
+  {
+   "id": "lane-requires-judgment",
+   "rule": "lane != null  =>  judgment 필수",
+   "why": "레인 배정은 LLM 판단이다. 근거가 없으면 나중에 오판을 역추적할 수 없고, 필터 조정의 입력도 사라진다"
+  },
+  {
+   "id": "longshot-must-be-cheap",
+   "rule": "lane == 'longshot'  =>  submit_method == 'auto-form'",
+   "why": "롱샷의 전제는 건당 비용이 0에 수렴한다는 것이다. 사람 시간을 먹는 롱샷은 물량 전략을 스스로 무너뜨린다"
+  },
+  {
+   "id": "hard-no-excludes",
+   "rule": "sponsorship == 'No'  =>  lane 배정 금지 (worklane=dismissed, dismiss_reason=sponsorship)",
+   "why": "명시적 거부만이 유일한 하드 제외다. Unknown·Unlikely 는 확률이 낮을 뿐 0이 아니므로 롱샷으로 보낸다"
+  },
+  {
+   "id": "outreach-event-needs-contact",
+   "rule": "Event type ∈ {Outreach Sent, Connection Accepted, Outreach Reply}  =>  Payload 에 contact_uid 필수 (Activity Log 에 Contact 관계가 없으므로)",
+   "why": "누구에게 보냈는지 없으면 답장률도 후속도 계산할 수 없다"
+  },
+  {
+   "id": "outreach-first-message-no-visa",
+   "rule": "Outreach Sent 의 kind ∈ {A, B}  =>  메시지 본문에 H-1B · visa · sponsorship 미포함",
+   "why": "첫 메시지의 비자 언급은 답장률을 떨어뜨리고, 트랜스퍼 설명은 답장 뒤에 짧게 하는 것이 정확하다"
+  },
+  {
+   "id": "outreach-approval-per-item",
+   "rule": "queue item status: proposed → approved 는 사용자만 전이",
+   "why": "내 이름으로 나가는 말이다. volume 레인의 정책 일괄 승인은 아웃리치에 적용하지 않는다"
+  }
+ ],
+ "enums": {
+  "closed_reason": {
+   "values": [
+    "accepted",
+    "rejected",
+    "ghosted",
+    "withdrawn"
+   ],
+   "notes": {
+    "rejected": "회사가 명시적으로 거절",
+    "ghosted": "마지막 기대 응답 후 14일 무응답",
+    "withdrawn": "지원 후 내가 철회 (지원 전 거부는 worklane=dismissed)"
+   }
+  },
+  "dismiss_reason": {
+   "$comment": "선호 학습 신호. 같은 사유 5건 누적 시 briefer 가 필터 조정을 제안한다. 목록을 늘리면 집계가 의미를 잃으므로 신중히.",
+   "values": [
+    "location",
+    "level",
+    "comp",
+    "domain",
+    "company",
+    "sponsorship",
+    "stack",
+    "no_response",
+    "unspecified"
+   ]
+  },
+  "submit_method": {
+   "$comment": "저장 시점에 판정한다. 사용자가 '이건 내가 해야겠구나'를 미리 알아야 하기 때문.",
+   "values": [
+    "auto-form",
+    "assisted",
+    "manual",
+    "email"
+   ],
+   "hints": {
+    "auto-form": "greenhouse.io · lever.co · ashbyhq.com",
+    "manual": "myworkdayjobs.com · 계정 생성 요구 · 복잡한 로그인",
+    "email": "지원처가 이메일 주소"
+   }
+  },
+  "event_type": {
+   "values": [
+    "Discovered",
+    "Proposed",
+    "Approved",
+    "Dismissed",
+    "Tailored",
+    "Applied",
+    "Recruiter Reach",
+    "Outreach Sent",
+    "Connection Accepted",
+    "Outreach Reply",
+    "Stage Change",
+    "Interview Scheduled",
+    "Interview Done",
+    "Note",
+    "Reject",
+    "Offer",
+    "Withdraw"
+   ],
+   "notes": {
+    "Recruiter Reach": "인바운드 — 상대가 먼저 연락",
+    "Outreach Sent": "아웃바운드 — 내가 먼저 연락 (연결 노트 A · 본 메시지 B · 후속 C). Payload 에 kind·angle·contact_uid",
+    "Connection Accepted": "아웃바운드 연결 요청이 수락됨",
+    "Outreach Reply": "아웃바운드에 답장이 옴. Payload 는 요약만 (원문 복사 금지)"
+   }
+  },
+  "agent": {
+   "values": [
+    "Job Hunter",
+    "Briefer",
+    "Resume Tailor",
+    "Applicator",
+    "Outreach",
+    "Interview Coach",
+    "Tracker",
+    "User"
+   ]
+  },
+  "level": {
+   "values": [
+    "Mid",
+    "Senior",
+    "Staff",
+    "Unknown"
+   ]
+  },
+  "sponsorship": {
+   "$comment": "확신도 내림차순. Unknown 은 '아직 판정 안 함'이지 '불명 확정'이 아니다 — job-hunter 가 회사 규모·업종·JD 문구·과거 이력을 읽어 Likely/Unlikely 로 해소한다. 해소 근거는 judgment 에 남긴다.",
+   "values": [
+    "Yes",
+    "Likely",
+    "Unknown",
+    "Unlikely",
+    "No"
+   ],
+   "notes": {
+    "Yes": "JD 또는 회사가 명시",
+    "Likely": "명시는 없으나 정황상 가능 — 대형 제조사·과거 H-1B 이력·다국적 인력 구성",
+    "Unknown": "아직 해소 전. 이 상태로 오래 두지 않는다",
+    "Unlikely": "명시는 없으나 정황상 어려움 — 소규모·비용 부담·현지 채용 위주",
+    "No": "명시적 거부. 유일한 하드 제외"
+   }
+  },
+  "lane": {
+   "$comment": "지원 레인. 임계값(score·주간 상한·회사당 상한)은 계약이 아니라 정책이므로 자율성 정책(Notion Settings 페이지 → 캐시 data/cache/autonomy.yaml)에 둔다. 여기엔 어휘만 있다.",
+   "values": [
+    "conviction",
+    "volume",
+    "longshot"
+   ],
+   "notes": {
+    "conviction": "고확신. 건별 승인 + 풀 튜닝 + 아웃리치. 사람이 시간을 쓰는 유일한 레인",
+    "volume": "스폰서십 확보된 물량. 정책 승인 후 무인 제출",
+    "longshot": "확률은 낮으나 비용이 0. 정책 승인 후 무인 제출. 학습 신호의 주 공급원"
+   }
+  },
+  "source": {
+   "values": [
+    "LinkedIn",
+    "Company site",
+    "Referral",
+    "Recruiter",
+    "Indeed",
+    "Wellfound",
+    "Levels.fyi",
+    "Other"
+   ]
+  },
+  "outreach_angle": {
+   "$comment": "아웃리치 메시지의 단일 각도. 하나만 고른다. 세그먼트별 답장률 학습의 축.",
+   "values": [
+    "posting",
+    "korean",
+    "alumni",
+    "domain",
+    "mutual"
+   ],
+   "notes": {
+    "posting": "공고 직접 — JD 의 요구 하나와 질문 하나",
+    "korean": "같은 출신·모국어 상대 (settings outreach.identity.heritage) — 그 언어로, 직함·존칭 정확히",
+    "alumni": "동문 (settings outreach.identity.schools)",
+    "domain": "공통 도메인 경력 (settings outreach.identity.domains)",
+    "mutual": "공통 1촌 경유"
+   }
+  },
+  "contact_role": {
+   "$comment": "Contacts.Role 과 동일. 아웃리치 세그먼트 축.",
+   "values": [
+    "Recruiter",
+    "Hiring Manager",
+    "Referrer",
+    "Engineer",
+    "Other"
+   ]
+  },
+  "outreach_status": {
+   "$comment": "Notion Outreach Queue DB 의 Status 속성 (2026-10-21 부터. 이전엔 로컬 queue.yaml). proposed → approved 는 사용자만 전이.",
+   "values": [
+    "proposed",
+    "approved",
+    "sent",
+    "accepted",
+    "replied",
+    "no_response",
+    "blocked"
+   ],
+   "flow": [
+    "proposed",
+    "approved",
+    "sent",
+    "accepted",
+    "replied"
+   ],
+   "terminal": [
+    "replied",
+    "no_response",
+    "blocked"
+   ]
+  }
+ },
+ "required": {
+  "$comment": "job 의 worklane·stage 는 계약 어휘다. Notion 에는 Status 한 컬럼으로 접어 쓴다 (storage.jobs.status_mapping).",
+  "job": [
+   "Title",
+   "Company",
+   "worklane",
+   "stage",
+   "Stable ID",
+   "Source"
+  ],
+  "event": [
+   "Summary",
+   "Timestamp",
+   "Event type",
+   "Agent"
+  ]
+ },
+ "ranges": {
+  "Match score": {
+   "min": 0,
+   "max": 100
+  }
+ },
+ "storage": {
+  "$comment": "어디에 무엇이 사는가 (2026-10-21 data/ → Notion 이전). 개인 데이터는 전부 Notion. 로컬은 포인터 data/notion_databases.json 과 재생성 가능한 캐시뿐. 키는 포인터 파일의 databases.* / pages.* 와 같다. 첨부 절차는 hooks/notion-files.md.",
+  "pointer": "data/notion_databases.json",
+  "cache": {
+   "data/cache/master_resume.json": "resume_versions 의 Current 행 첨부 — /sync 가 내림. 읽기 전용",
+   "data/cache/autonomy.yaml": "settings 페이지의 yaml 블록 — /sync 가 추출. 읽기 전용",
+   "data/cache/tailored/<stable-id>/": "tailored 행의 작업 사본 — resume-tailor 가 쓰고 올린다",
+   ".cache/h1b/": "DOL LCA · USCIS 공공 데이터 — scripts/h1b_sponsors.py. 개인정보 아님"
+  },
+  "jobs": {
+   "purpose": "파이프라인 — 공고 하나가 행 하나. 모든 것의 진입점",
+   "key_properties": ["Title", "Company", "Status", "Stable ID", "Job UID", "Source", "Level", "Sponsorship", "Location", "Match score", "JD URL", "JD snapshot", "Tailored resume (url → tailored 행)", "Notes", "Activity", "Contacts", "Target company", "Documents", "Tailored", "Outreach"],
+   "status_values": ["Saved", "Applying", "Applied", "Phone Screen", "Tech Interview", "Onsite", "Offer", "Rejected", "Ghosted", "Withdrawn"],
+   "status_mapping": {
+    "Saved": "worklane ∈ {discovered, proposed} · stage=lead",
+    "Applying": "worklane ∈ {tailored, ready, needs_human} · stage=lead",
+    "Applied": "worklane=submitted · stage=applied",
+    "Phone Screen": "worklane=submitted · stage=screening",
+    "Tech Interview": "worklane=submitted · stage=interview",
+    "Onsite": "worklane=submitted · stage=interview",
+    "Offer": "worklane=submitted · stage=offer",
+    "Rejected": "stage=closed · closed_reason=rejected",
+    "Ghosted": "stage=closed · closed_reason=ghosted",
+    "Withdrawn": "Applied date 있음 → stage=closed · closed_reason=withdrawn / 없음 → worklane=dismissed"
+   },
+   "writers": ["job-hunter (생성)", "briefer (승격·기각)", "resume-tailor", "applicator", "tracker"]
+  },
+  "activity_log": {
+   "purpose": "이벤트 로그 — append-only. 퍼널·체류 시간의 유일한 원천",
+   "key_properties": ["Summary", "Timestamp", "Event type", "Agent", "From → To", "Job", "Payload", "Event UID"],
+   "writers": ["모든 에이전트"]
+  },
+  "contacts": {
+   "purpose": "리크루터 · 하이어링 매니저 · 엔지니어 · 리퍼러",
+   "key_properties": ["Name", "Role", "Status (Active|Cold|Closed)", "Company", "Email", "LinkedIn", "Jobs", "Outreach", "Notes", "Last touch", "Next touch", "Contact UID"],
+   "writers": ["outreach", "interview-coach", "tracker"]
+  },
+  "target_companies": {
+   "purpose": "타겟 회사 목록 — Jobs.Target company 의 대상",
+   "key_properties": ["Name", "Jobs"],
+   "writers": ["job-hunter"]
+  },
+  "resume_versions": {
+   "purpose": "마스터 이력서 — 행 하나가 버전 하나. Current 행 본문에 붙은 master_resume.vN.json 이 단일 원천. 구 data/master_resume.* + data/backups/",
+   "key_properties": ["Name (vN — date)", "Version", "Current (checkbox, 정확히 1행)", "Date", "Schema version", "Files", "Changelog", "Bullets"],
+   "body": "첨부 4개: master_resume.vN.json · .md · _audit.md · _stories.md",
+   "invariant": "Current 가 켜진 행은 정확히 1개",
+   "writers": ["resume-curator (유일)"]
+  },
+  "tailored": {
+   "purpose": "공고별 튜닝본 — 행 = stable-id. Jobs.Tailored resume 가 행 URL 을 가리킨다. 구 data/tailored/",
+   "key_properties": ["Name (stable-id)", "Job", "Company", "Variant (job-specific|cluster|draft)", "Status (current|superseded|submitted)", "Date", "Files", "Master version", "Notes", "Tailored UID"],
+   "body": "resume.md. 하위 페이지: cover-letter · tailoring_notes · submit-kit · kits/*. 첨부: resume.json · PDF",
+   "writers": ["resume-tailor", "applicator (submit-kit · Status=submitted)"]
+  },
+  "documents": {
+   "purpose": "프렙 · 리서치 · 협상 · 회고 · 스윕 리포트 · 과정 문서. 구 data/docs/",
+   "key_properties": ["Name", "Type", "Company", "Job", "Target company", "Date", "Status (current|archived)", "Files", "Source path", "Doc UID"],
+   "type_values": ["sweep", "jd-analysis", "research", "interview-prep", "debrief", "negotiation", "cheatsheet", "linkedin", "process", "housing", "other"],
+   "body": "문서 마크다운 (~150KB 이하, 넘으면 첨부). 첨부: HTML · PDF · ICS",
+   "writers": ["interview-coach", "job-hunter (sweep)", "outreach (linkedin · process)"]
+  },
+  "outreach_queue": {
+   "purpose": "LinkedIn 아웃리치 큐 — 행 = 사람 × 공고 × 메시지 종류. 구 data/outreach/queue.yaml + drafts/",
+   "key_properties": ["Name", "Contact", "Job", "Angle (outreach_angle)", "Kind (A|B|C)", "Status (outreach_status)", "Korean affiliated", "Mode snapshot (draft|confirm|delegated)", "Proposed", "Sent", "Next touch", "Replied", "Notes", "Queue UID"],
+   "body": "메시지 초안",
+   "caps": "일/주 발송 수 = Sent 가 범위 안인 행의 수",
+   "writers": ["outreach", "briefer (approved 반영)", "사용자 (proposed → approved)"]
+  },
+  "settings": {
+   "kind": "page",
+   "purpose": "자율성 정책 — 본문의 ```yaml 코드 블록 하나. 구 data/autonomy.yaml. 템플릿 templates/autonomy.example.yaml",
+   "writers": ["사용자"]
+  }
+ }
 }

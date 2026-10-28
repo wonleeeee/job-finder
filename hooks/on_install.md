@@ -17,20 +17,23 @@
    → data/ 아래가 스테이징되면 커밋을 막는다
 
 3. SEED ────────────────────────────────────────────────────
-   data/master_resume.json  없으면  templates/master_resume.example.json 복사
-   data/autonomy.yaml       없으면  templates/autonomy.example.yaml 복사
-   data/tailored/ · data/docs/ · data/backups/ 디렉터리 생성
-   ⚠️ 이미 있으면 절대 덮어쓰지 않는다
+   data/cache/ 디렉터리 생성 (그 외 data/ 에는 아무것도 만들지 않는다)
+   시드는 로컬 파일이 아니라 Notion 에 올라간다 — 4단계에서:
+     templates/master_resume.example.json → Resume Versions 첫 행의 첨부 (Current ✔)
+     templates/autonomy.example.yaml      → Settings 페이지의 yaml 블록
+   ⚠️ 이미 행·페이지가 있으면 절대 덮어쓰지 않는다
 
 4. PROVISION ───────────────────────────────────────────────
-   hooks/provision.md 실행 → Notion DB 생성 + 포인터 기록
+   hooks/provision.md 실행 → Notion DB 8개 + Settings 생성 + 시드 업로드 + 포인터 기록
+   (기존 기기에서 포인터 파일을 가져온 경우엔 검증만 하고 넘어간다)
 
-5. 검증 ────────────────────────────────────────────────────
-   <PY> scripts/validate_resume.py
+5. SYNC + 검증 ─────────────────────────────────────────────
+   /sync                                        → data/cache/ 채움
+   <PY> scripts/validate_resume.py data/cache/master_resume.json
    <PY> scripts/notion_tracker.py contract
 
 6. 온보딩 안내 ─────────────────────────────────────────────
-   시드된 master_resume.json 은 예시 데이터다. 사용자에게 명확히 알린다.
+   시드된 Resume Versions v1 은 예시 데이터다. 사용자에게 명확히 알린다.
    → resume-curator 를 불러 초기 온보딩을 시작하도록 안내
    → 예상 소요: 3~5시간, 여러 세션으로 나눠도 된다
 ```
@@ -43,7 +46,7 @@
 1. 마스터 이력서 구축      resume-curator 와 대화 (3~5시간, 나눠서 가능)
                            지금 있는 것은 예시 데이터입니다
 2. 선호 설정               목표 직무·지역·연봉·제외 목록
-3. 자율성 확인             data/autonomy.yaml — 기본은 안전한 쪽입니다
+3. 자율성 확인             Notion Settings 페이지 — 기본은 안전한 쪽입니다
 4. 첫 스윕                 job-hunter 에게 "공고 찾아줘"
 5. 이후                    매주 월요일 브리핑만 확인하면 됩니다
 ```

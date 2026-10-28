@@ -25,7 +25,7 @@ slug(s):
 | `Anthropic` | `Senior Backend Engineer` | 2026-04-11 | `anthropic-senior-backend-engineer-2026-04` |
 | `Acme Fintech, Inc.` | `Platform Engineer` | 2026-08-01 | `acme-fintech-inc-platform-engineer-2026-08` |
 | `X` | `SWE (L5)` | 2026-08-01 | `x-swe-l5-2026-08` |
-| `한화큐셀` | `Backend Engineer` | 2026-08-01 | `backend-engineer-2026-08` |
+| `삼성전자` | `Backend Engineer` | 2026-08-01 | `backend-engineer-2026-08` |
 
 마지막 예시가 중요하다 — **비ASCII는 전부 탈락한다.** 회사명이 통째로 사라질 수 있으므로
 한글 회사명은 영문 표기를 쓰거나, stable-id에만 의존하지 말고 아래 조회 방어선을 반드시 쓴다.

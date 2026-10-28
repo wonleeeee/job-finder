@@ -18,14 +18,16 @@ model: sonnet
 
 ## 읽는 것
 
-1. `data/master_resume.json`
+1. `data/cache/master_resume.json` (`/sync` 가 내려준 사본. 정본은 Notion Resume Versions)
    - `preferences.*` — 타겟 직무·레벨·지역·최소연봉·회사규모·제외목록
    - `basics.work_authorization` — 스폰서십 필터를 결정
    - `basics.location.willing_to_relocate`
    - `experience[].tech` / `skills` — 매치 점수의 근거
-2. `data/notion_databases.json` — Jobs data_source_id + 기존 행(중복 제거용)
-3. 계약: **`schemas/contract.json`** — 정본이다. 직접 읽는다.
+2. `data/cache/autonomy.yaml` — `sweep.*` (상한 · min_score · ttl). 정본은 Settings 페이지
+3. `data/notion_databases.json` — Jobs · Target Companies · Documents 의 data_source_id + 기존 행(중복 제거용)
+4. 계약: **`schemas/contract.json`** — 정본이다. 직접 읽는다.
    (`<PY> scripts/notion_tracker.py contract` 는 같은 내용의 출력용 래퍼)
+5. H-1B 공공 데이터: `.cache/h1b/` (`scripts/h1b_sponsors.py` 가 관리. 없으면 `fetch` → `build`. 개인정보 아님)
 
 ## 건드리지 않는 것
 
@@ -39,6 +41,8 @@ model: sonnet
 ```
 1. 타겟 회사 채용 페이지 직접     최고 신호, 최저 잡음
                                   preferences.target_companies + 사용자 지정 감시 목록
+                                  + H-1B 트랜스퍼 실적 상위 회사:
+                                    <PY> scripts/h1b_sponsors.py rank --direct --state <주> --title "<직무 정규식>"
 2. LinkedIn 검색 URL (WebFetch)   타겟 직무 + 지역 + 최근 7일
 3. Wellfound · Levels.fyi ·       WebSearch로 찾는다
    HN "Who is hiring" 월간 스레드 ·
@@ -55,7 +59,11 @@ model: sonnet
                 명백히 비대상 직군(리크루팅, 세일즈 엔지니어링 등)
 
 2. 스폰서십     JD나 회사가 명시적으로 "스폰서십 없음" → 드롭
-                불명 → Sponsorship: Unknown 으로 통과시키되 점수 -15
+                불명 → 공식 데이터로 확인한다:
+                  <PY> scripts/h1b_sponsors.py lookup "<회사명 정규식>"
+                  (DOL LCA 공개 데이터. transfer 건수가 있으면 Sponsorship: Yes,
+                   LCA 자체가 없으면 Unknown 유지. 데이터가 안 깔려 있으면 건너뛴다)
+                여전히 불명 → Sponsorship: Unknown 으로 통과시키되 점수 -15
                 낙관적으로 Yes 를 기본값으로 두지 않는다
 
 3. 지역         target_locations 를 만족해야 함
@@ -105,21 +113,20 @@ model: sonnet
 |---|---|
 | Title | JD 원문 직무명 (URL 슬러그 아님) |
 | Company | 회사명 |
-| **worklane** | `discovered` ← 항상. proposed 승격은 briefer가 한다 |
-| **stage** | `lead` |
+| **Status** | `Saved` ← 항상 (계약의 worklane=discovered · stage=lead). proposed 승격은 briefer가 한다 |
 | Level | JD 표현에서 추론 |
 | Location | 멀티셀렉트 — 리모트/하이브리드/온사이트 + 도시 태그 |
-| Sponsorship | Yes / No / Unknown — 정직하게 |
+| Sponsorship | Yes / Likely / Unknown / Unlikely / No — 정직하게. 해소 근거는 Notes 에 |
+| Target company | 해당 Target Companies 행이 있으면 관계 |
 | JD URL | 정규 URL |
 | JD snapshot | JD 전문 (공고는 사라진다) |
 | Source | enum |
 | Posted date | JD에 있으면 |
 | Match score | 계산값 |
 | Stable ID | 헬퍼 출력 |
-| **submit_method** | `auto-form` / `assisted` / `manual` / `email` ← 지금 판정한다 |
 | Salary min/max | 공개돼 있으면 |
 | Tags | JD 신호에서 (ai-infra, fintech, growth-stage …) |
-| Notes | 점수 내역 + 주의사항 |
+| Notes | 점수 내역 + 주의사항 + **`submit_method: auto-form/assisted/manual/email`** ← 지금 판정한다 (Notion 에 별도 컬럼이 없다) + lane 판단 |
 
 그리고 **Activity Log 행 추가**:
 `Event type: Discovered` · `Agent: Job Hunter` · `Job` 관계 설정 ·
@@ -148,9 +155,10 @@ email       지원처가 이메일 주소
 4. 필터 캐스케이드 적용
 5. 생존자 점수화. 40 미만 드롭
 6. 상위 N건(기본 10)을 discovered 로 기록. Discovered 이벤트 로깅
-7. 실행 요약을 로그에 남긴다 (사용자에게 보내지 않는다):
-     각 필터 단계별 카운트 · 저장 건수 · 상위 5건 한 줄 피치
-   → briefer 가 이걸 주간 브리핑에 쓴다
+7. 실행 요약을 **Documents 행**으로 남긴다 (사용자에게 보내지 않는다):
+     Type=sweep · Name "Sweep — <YYYY-MM-DD> <범위>" · Date · Status=current
+     본문: 각 필터 단계별 카운트 · 저장 건수 · 상위 5건 한 줄 피치 · 드롭 사유 요약
+   → briefer 가 이걸 주간 브리핑에 쓴다. 로컬 파일로 쓰지 않는다
 ```
 
 ### 단일 URL 평가 (사용자가 JD를 줬을 때)
@@ -171,7 +179,7 @@ email       지원처가 이메일 주소
 ### 생존 확인
 
 ```
-1. worklane=discovered 이고 14일 이상 손대지 않은 행 조회
+1. Status=Saved (worklane=discovered) 이고 14일 이상 손대지 않은 행 조회
 2. 각 JD URL을 WebFetch
    404 / "더 이상 지원받지 않음" → Note 이벤트 추가 + 정리 대상 표시
 3. 자동 전이하지 않는다. briefer 를 통해 보고한다.

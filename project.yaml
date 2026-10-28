@@ -2,7 +2,7 @@
 apiVersion: 2
 name: job-finder
 displayName: 이직 비서
-version: 0.1.0
+version: 0.2.0
 description: >
   이직 준비의 전 과정을 AI가 무인으로 굴리고, 사람은 사실 제공·승인·
   대리 제출·전략 판단 네 가지에만 개입하는 개인 비서.
@@ -15,80 +15,110 @@ interface:
   mode: agents            # agents | commands | both
   agents:
     - name: resume-curator
-      summary: 마스터 이력서 관리 (유일한 writer)
+      summary: 마스터 이력서 관리 (유일한 writer — Notion Resume Versions 에 새 버전 행)
     - name: job-hunter
       summary: 공고 발굴·필터·스코어링 → discovered 적재
     - name: briefer
       summary: 주간 브리핑 발행 · 승인 요청 · proposed 승격
     - name: resume-tailor
-      summary: 승인 건에 대해 JD 맞춤 이력서 생성
+      summary: 승인 건에 대해 JD 맞춤 이력서 생성 (Notion Tailored 행)
     - name: applicator
       summary: 지원 제출 · 제출 키트 생성 · needs_human 인계
+    - name: outreach
+      summary: LinkedIn 아웃바운드 — prospecting · 메시지 초안 · Claude in Chrome 발송 준비(confirm) · 답장 수집 (Notion Outreach Queue)
     - name: interview-coach
-      summary: 면접 일정 조율 · D-3 프렙 문서 생성
+      summary: 면접 일정 조율 · D-3 프렙 문서 생성 (Notion Documents 행)
     - name: tracker
       summary: 파이프라인 상태 · 이벤트 로그 · 데이터 계약 소유
   commands:
+    - name: sync
+      summary: Notion 정본(Resume Versions Current · Settings)을 data/cache/ 로 내려받기 — 세션 시작
     - name: brief
       summary: 주간 브리핑을 지금 생성
     - name: approve
       summary: 승인 대기 건을 대화로 처리
     - name: backup
-      summary: data/ 스냅샷을 지정 경로에 저장
+      summary: /sync 후 캐시 + 이력서 첨부를 오프라인 zip 으로 (Notion 이 1차 백업)
     - name: doctor
       summary: 설정·의존성·데이터 위생 점검
+    - name: outreach
+      summary: LinkedIn 아웃리치 주간 실행 (찾기 · 발송 · 답장 · 큐)
 
 # ── 상태를 어디에 두는가 ─────────────────────────────────────
+# 2026-10-21 부터 개인 데이터는 전부 Notion. 로컬은 포인터 하나 + 재생성 가능한 캐시.
 state:
   - id: master-resume
-    class: local
-    kind: local-file
-    path: data/master_resume.json
+    class: remote
+    kind: notion-file                        # DB 행에 붙은 첨부 파일이 정본
+    pointer: data/notion_databases.json
+    db: resume_versions
+    selector: "Current = true"               # 정확히 1행
+    file: master_resume.vN.json              # 행 본문의 <file source=...> 첨부
+    cache: data/cache/master_resume.json     # /sync 가 내려준다. 읽기 전용 사본
     schema: schemas/master_resume.schema.json
     versionField: meta.schema_version
-    seed: templates/master_resume.example.json
-    validate: <PY> scripts/validate_resume.py
+    seed: templates/master_resume.example.json   # 프로비저닝 시 첫 행의 첨부로 업로드
+    validate: <PY> scripts/validate_resume.py data/cache/master_resume.json
     validateFallback: >
       resume-curator 가 schemas/master_resume.schema.json 을 읽어 직접 대조한다.
       required · type · enum 수준까지. 기계 보증은 없다.
+    write: >
+      resume-curator 만. 새 행 생성 → 첨부 4개 업로드 → Current 이동 (hooks/notion-files.md).
+      캐시에 직접 쓰지 않는다.
 
   - id: autonomy
-    class: local
-    kind: local-file
-    path: data/autonomy.yaml
-    seed: templates/autonomy.example.yaml
+    class: remote
+    kind: notion-page
+    pointer: data/notion_databases.json
+    page: pages.settings
+    format: "본문의 ```yaml 코드 블록 하나"
+    cache: data/cache/autonomy.yaml          # /sync 가 추출한다
+    seed: templates/autonomy.example.yaml    # 프로비저닝 시 Settings 페이지 본문으로
+    write: Settings 페이지에서 직접 고친다. 캐시에 쓰지 않는다
 
   - id: pipeline
     class: remote
     kind: notion
     pointer: data/notion_databases.json
-    contractFile: schemas/contract.json      # ★ 정본 — 데이터. 에이전트가 직접 읽는다
+    contractFile: schemas/contract.json      # ★ 정본 — 데이터. 에이전트가 직접 읽는다 (storage 절: 어디에 무엇이)
     contract: <PY> scripts/notion_tracker.py contract   # 위 파일을 보기 좋게 출력할 뿐
     audit: <PY> scripts/notion_tracker.py audit
     export: <PY> scripts/notion_tracker.py export       # 원격 백업 (파일 복사 불가)
-    databases: [jobs, activity_log, contacts]
+    databases: [jobs, activity_log, contacts, target_companies, documents, tailored, resume_versions, outreach_queue]
+    pages: [settings]
     provision: hooks/provision.md
+    files: hooks/notion-files.md             # 첨부 업로드 · 다운로드 절차
 
   - id: artifacts
-    class: local
-    paths:
-      - data/tailored/
-      - data/docs/
-      - data/backups/
+    class: remote
+    kind: notion
+    pointer: data/notion_databases.json
+    items:
+      - db: tailored                         # 구 data/tailored/<id>/ — 행=stable-id, 본문 resume.md, 하위 페이지·첨부
+        cache: data/cache/tailored/<stable-id>/   # resume-tailor 의 작업 사본
+      - db: documents                        # 구 data/docs/ — Type · Company · Job 관계
+      - db: outreach_queue                   # 구 data/outreach/queue.yaml + drafts/ — 본문=초안
+      - db: resume_versions                  # 구 data/backups/master_resume.* — 행=버전
+
+# ── 캐시 — 재생성 가능. 지워도 된다 ─────────────────────────
+cache:
+  - path: data/cache/                        # /sync 가 채운다 (이력서 · 정책 · 튜닝 작업본). 개인정보 포함 → gitignore
+  - path: .cache/h1b/                        # DOL LCA · USCIS 공공 데이터 (~470MB). scripts/h1b_sponsors.py fetch 가 채운다
 
 # ── 프라이버시 ───────────────────────────────────────────────
 privacy:
   mode: gitignore          # gitignore | none   (git-crypt 는 폐기 — DESIGN.md §13)
-  rule: "개인적인 것은 예외 없이 data/ 안에 둔다"
-  ignored: ["data/"]
+  rule: "개인 데이터는 Notion 에, 로컬은 포인터(data/notion_databases.json)뿐"
+  ignored: ["data/", ".cache/"]
   guard: scripts/git-hooks/pre-commit
+  doctor: "data/ 에 notion_databases.json 과 cache/ 외의 파일이 있으면 경고 — Notion 으로 옮길 것"
 
 # ── 요구사항 ─────────────────────────────────────────────────
 requires:
   hub: ">=2.0.0"
   mcp:
     required: [notion]
-    optional: [gmail, google-calendar]
+    optional: [gmail, google-calendar, claude-in-chrome]   # claude-in-chrome: outreach 의 LinkedIn 읽기·입력, applicator 의 폼 작성
   bin: []                  # ★ 외부 런타임 없이 동작한다
   env: []                  # NOTION_TOKEN 은 헤드리스 실행 시에만 (선택)
   profile: [full_name, location, work_authorization]
@@ -98,7 +128,7 @@ requires:
   # 동작 여부가 아니라 정밀도가 달라질 뿐이다 (DESIGN.md 원칙 5).
   optional_bin:
     - name: python3
-      purpose: 스키마 검증 · 계약 감사 · 원격 백업 덤프
+      purpose: 스키마 검증 · 계약 감사 · 원격 백업 덤프 · 튜닝본 렌더 · H-1B 조회
       # ⚠️ Windows 주의: python3.exe 는 존재하지 않는다(python.exe + py 런처뿐).
       #    게다가 WindowsApps 의 Microsoft Store 스텁이 python3 이름을 가로챈다.
       #    스텁은 --version 에 아무것도 출력하지 않으므로 실행 검증으로 걸러야 한다.
@@ -109,6 +139,14 @@ requires:
         계약: 에이전트가 schemas/contract.json 을 직접 읽음 (정본이 데이터라 동일)
         감사: tracker 가 불변식을 수동 점검 — 놓칠 수 있음
         백업: 원격 전체 덤프 불가 → 요약만. 원격 마이그레이션 전 주의 필요
+        렌더: resume-tailor 가 resume.md 를 직접 쓰고 PDF 는 사용자가 인쇄
+    - name: curl
+      purpose: Notion 첨부 업로드/다운로드 (hooks/notion-files.md)
+      resolve: ["curl"]
+      verify: "--version 이 'curl' 로 시작"
+      degraded:
+        업로드: 200 KiB 이하 텍스트는 notion-create-attachment 로. 바이너리(PDF)는 사용자가 Notion UI 로 올린다
+        다운로드: 텍스트 첨부는 notion-fetch 본문으로 대체. 바이너리는 사용자가 내려받는다
 
 # ── 주기 실행 (허브가 예약 에이전트로 등록) ──────────────────
 schedules:

@@ -6,6 +6,10 @@
 /data/*
 !/data/.gitkeep
 
+# 재생성 가능한 캐시 (공공 데이터 · Notion 에서 내려받은 사본)
+.cache/
+/data/cache/
+
 # 비밀값 — MCP로 못 붙는 서비스에만 사용
 .env
 

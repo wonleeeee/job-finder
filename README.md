@@ -80,34 +80,43 @@
 
 ---
 
-## 에이전트 7
+## 에이전트 8
 
 | 에이전트 | 하는 일 | 소유(쓰기) |
 |---|---|---|
-| **resume-curator** | 마스터 이력서 구축·유지 | `data/master_resume.json` (유일 writer) |
-| **job-hunter** | 공고 발굴·필터·스코어링 | Jobs 신규행 |
+| **resume-curator** | 마스터 이력서 구축·유지 | Notion **Resume Versions** (유일 writer — 새 버전 행 + `Current`) |
+| **job-hunter** | 공고 발굴·필터·스코어링 | Jobs 신규행, 스윕 리포트 (Documents `sweep`) |
 | **briefer** | 주간 브리핑·승인 요청 | 브리핑, `proposed` 승격 |
-| **resume-tailor** | JD 맞춤 이력서·커버레터 | `data/tailored/<id>/` |
-| **applicator** | 제출·제출 키트·후속 | 외부 행동, `submitted`/`needs_human` |
-| **interview-coach** | 일정 조율·프렙·협상 근거 | `data/docs/<company>/` |
-| **tracker** | 상태·이벤트 로그·데이터 계약 | Jobs 상태, Activity Log |
+| **resume-tailor** | JD 맞춤 이력서·커버레터 | Notion **Tailored** 행 (행 = stable-id) |
+| **applicator** | 제출·제출 키트·후속 | 외부 행동, `submitted`/`needs_human`, Tailored 하위 페이지 `submit-kit` |
+| **outreach** | LinkedIn 아웃바운드 — 사람 찾기·메시지·발송 준비·답장 | Contacts, Notion **Outreach Queue** |
+| **interview-coach** | 일정 조율·프렙·협상 근거 | Notion **Documents** 행 (research · interview-prep · negotiation · debrief) |
+| **tracker** | 상태·이벤트 로그·데이터 계약 | Jobs 상태, Activity Log, DB 위생 |
 
 ---
 
 ## 데이터와 프라이버시
 
 ```
- ⚙️ engine   CLAUDE.md · .claude/agents/ · schemas/ · scripts/ · templates/
+ ⚙️ engine   CLAUDE.md · .claude/agents/ · schemas/ · scripts/ · templates/ · hooks/
              → 평문 커밋. 개인정보 0. 이 레포에 있는 전부.
- 🔒 local    data/ 아래 전부 → gitignore. 내 기기에만.
- ☁️ remote   Notion (MCP OAuth) → 로컬엔 DB 포인터만, 그것도 data/ 안.
+ ☁️ remote   Notion (MCP OAuth) = 개인 데이터 전부.
+             Jobs · Activity Log · Contacts · Target Companies · Resume Versions ·
+             Tailored · Documents · Outreach Queue + Settings 페이지(자율성 정책)
+ 🔒 local    data/notion_databases.json — DB 포인터. 유일한 개인 파일. gitignore.
+ ♻️ cache    data/cache/ (/sync 가 내려받은 이력서·정책·튜닝 작업본) · .cache/h1b/ (공공 데이터)
+             → 지워도 된다. gitignore.
 ```
 
-**한 줄 규칙: 개인적인 것은 예외 없이 `data/` 안에 둔다.**
+**한 줄 규칙: 개인 데이터는 Notion 에, 로컬은 포인터와 캐시뿐.**
 
-그래서 `.gitignore`가 한 줄이고, 파일마다 "이건 민감한가"를 판단할 일이 없다.
+그래서 `.gitignore`가 두 줄이고, 파일마다 "이건 민감한가"를 판단할 일이 없다.
 레포에 개인정보가 애초에 존재하지 않으므로 **공개해도 안전하고, 포크한 사람은
-복호화나 키 배포 없이 즉시 쓸 수 있다.**
+복호화나 키 배포 없이 즉시 쓸 수 있다.** 다기기도 자연히 해결된다 — 어느 기기든
+clone 하고 Notion 에 로그인하면 같은 상태다.
+
+세션은 `/sync` 로 시작한다. Notion 의 정본(Resume Versions 의 `Current` 행, Settings 페이지)을
+`data/cache/` 로 내려받고, 에이전트는 그 사본을 읽는다. 쓰기는 캐시로 가지 않는다.
 
 비밀값은 MCP(OAuth) 우선 — Notion·Gmail·Calendar는 토큰을 파일에 저장하지 않는다.
 
@@ -121,7 +130,7 @@
 허브 프로젝트에서:  /install job-finder
 ```
 
-허브가 clone → 시드 복사 → **Notion DB 자동 생성**(프로비저닝) → 잠금 기록까지 처리한다.
+허브가 clone → **Notion DB·Settings 자동 생성**(프로비저닝, 시드 포함) → 잠금 기록까지 처리한다.
 
 ### 단독으로
 
@@ -129,15 +138,17 @@
 git clone https://github.com/wonleeeee/job-finder.git
 cd job-finder
 
-# 1. 개인 데이터 폴더 시드
-cp templates/master_resume.example.json data/master_resume.json
-cp templates/autonomy.example.yaml       data/autonomy.yaml
-
-# 2. 커밋 사고 방지 훅 설치
+# 1. 커밋 사고 방지 훅 설치
 git config core.hooksPath scripts/git-hooks
 
-# 3. Claude Code 실행 후
-#    → hooks/provision.md 를 따라 내 Notion 워크스페이스에 DB 생성
+# 2. Claude Code 실행 → Notion MCP 로그인
+
+# 3. 둘 중 하나
+#    새로 시작:  hooks/provision.md 를 따라 내 Notion 에 DB 8개 + Settings 생성
+#                (템플릿 이력서·정책이 시드로 올라간다)
+#    기존 기기:  data/notion_databases.json 을 복사해 온다 (내용은 id 뿐)
+
+# 4. /sync  → data/cache/ 에 이력서·정책이 내려온다
 #    → resume-curator 와 함께 마스터 이력서 구축 시작
 ```
 
@@ -150,6 +161,7 @@ git config core.hooksPath scripts/git-hooks
 | Calendar MCP | 일정 대조·등록 | 일정 조율 초안만 |
 | 브라우저 자동화 | 지원 폼 작성 | 전부 수동 제출 경로로 |
 | Python 3 *(선택)* | 스키마 검증 · 계약 감사 · 원격 백업 | 에이전트가 대행 (정밀도 하락) |
+| curl *(선택)* | Notion 첨부 업로드·다운로드 | 작은 텍스트는 MCP 로, PDF 는 사용자가 올림 |
 
 **Notion MCP만 필수다.** 나머지는 없으면 기능이 줄어들 뿐 깨지지 않는다.
 
@@ -175,13 +187,14 @@ job-finder/
 ├── DESIGN.md              설계 문서 (목적·원칙·결정 로그)
 ├── project.yaml           허브 매니페스트
 ├── .claude/
-│   ├── agents/            서브에이전트 7
-│   └── commands/          /brief /approve /backup /doctor
-├── schemas/               데이터 계약 — contract.json 이 정본(코드 아님)
-├── scripts/               선택적 도구 (검증·감사·원격 백업)
+│   ├── agents/            서브에이전트 8
+│   └── commands/          /sync /brief /approve /outreach /backup /doctor
+├── schemas/               데이터 계약 — contract.json 이 정본(코드 아님). storage 절에 "어디에 무엇이 사는지"
+├── scripts/               선택적 도구 (검증·감사·원격 백업·H-1B 조회·렌더)
 ├── templates/             시드·예시 (가짜 데이터)
-├── hooks/                 설치·업데이트·마이그레이션·프로비저닝 지침
-└── data/                  🔒 gitignore — 여기만 지키면 된다
+├── hooks/                 설치·업데이트·마이그레이션·프로비저닝·첨부 절차
+├── .cache/                ♻️ gitignore — 공공 데이터 (h1b/)
+└── data/                  🔒 gitignore — notion_databases.json + cache/ 뿐
 ```
 
 ---
