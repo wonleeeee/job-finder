@@ -34,4 +34,8 @@ if [ -n "$secrets" ]; then
     exit 1
 fi
 
+# 허브 PII 가드 — 엔진은 공개 가능해야 한다 (허브 DESIGN.md 원칙 6)
+hub_guard="$(git rev-parse --show-toplevel)/../../scripts/pii-guard.sh"
+if [ -f "$hub_guard" ]; then sh "$hub_guard" || exit 1; fi
+
 exit 0
