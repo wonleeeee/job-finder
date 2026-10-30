@@ -140,7 +140,7 @@ python3  →  py -3  →  python      순서로 시도하고,
 | 파이프라인 현황 | `<PY> scripts/notion_tracker.py status` | Notion MCP 로 직접 조회 (오히려 이쪽이 기본) |
 | 원격 백업 | `<PY> scripts/notion_tracker.py export` | 전체 덤프 불가. **원격 마이그레이션 전이라면 사용자에게 위험을 알린다** |
 | H-1B 스폰서 확인 | `<PY> scripts/h1b_sponsors.py lookup <회사>` / `rank --direct ...` (공공 데이터 캐시 `.cache/h1b/`) | WebSearch 로 USCIS Employer Data Hub·DOL LCA 데이터를 직접 찾아본다 — 느리고 놓칠 수 있다 |
-| 튜닝본 렌더 | `<PY> data/render/*.py <data/cache/tailored/<id>/>` (개인 스크립트 · 이 PC 에만) | resume-tailor 가 resume.md 를 직접 쓴다. PDF 는 사용자가 인쇄 |
+| 튜닝본 렌더 | `<PY> scripts/render/{render_html,render_cover_letter,build_machine_readable}.py data/cache/tailored/<id>/` | resume-tailor 가 resume.md 를 직접 쓴다. PDF 는 사용자가 인쇄 |
 | Notion 첨부 | `curl` (`hooks/notion-files.md`) | 200 KiB 이하 텍스트는 `notion-create-attachment`. 바이너리는 사용자가 UI 로 올린다 |
 
 `contract` 와 `status` 는 대행에 손실이 없다. `audit` 과 `export` 는 손실이 있으니

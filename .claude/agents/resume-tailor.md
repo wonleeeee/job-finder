@@ -30,14 +30,16 @@ model: sonnet
 |---|---|---|
 | `resume.json` | 튜닝본. 마스터와 같은 스키마 — 필터·재정렬된 부분집합 | 본문 첨부 |
 | `resume.md` | 검토용 렌더 | **행 본문** |
-| `resume.html` / `resume.pdf` | 제출용 (`data/render/render_html.py` → 브라우저 인쇄) | 본문 첨부 (PDF 는 사용자가 올려도 된다) |
+| `resume.html` / `resume.pdf` | 제출용 (`scripts/render/render_html.py` → 브라우저 인쇄) | 본문 첨부 (PDF 는 사용자가 올려도 된다) |
 | `cover-letter.md` | 커버레터 초안 | 하위 페이지 `cover-letter` |
 | `tailoring_notes.md` | 왜 이걸 골랐나 · JD 키워드 커버리지 표 · 뺀 것과 사유 · 발견한 갭 | 하위 페이지 `tailoring_notes` |
 | `submit-kit.md` · `kits/*` | applicator 가 쓴다 | 하위 페이지 `submit-kit` · `kits/*` |
 
-렌더 스크립트는 `data/render/` 의 것을 호출한다 (`README.md` 참조). **엔진이 아니다** — 이름·연락처·이력서 내용이
-코드에 박혀 있어 공개 레포에 둘 수 없다(gitignore). 없으면(다른 PC) resume.md 까지만 만들고 HTML/PDF 는 인계한다.
-범용 렌더러(마스터 캐시에서 연락처를 읽는)로 바꾸면 `scripts/` 로 올린다.
+렌더 스크립트는 `scripts/render/` 의 엔진이다. 인자는 작업 폴더 하나이고, 이름·연락처·주소·체류 자격은 전부
+그 폴더의 `resume.json` `basics` 에서 읽는다 (코드에 개인 값 없음). 표현 조정은 같은 폴더의 선택 파일 `render.json` 으로 한다
+(스키마가 최상위 추가 키를 막기 때문) — `sub_ids`(상위 불릿 아래 중첩할 불릿 id) · `auth_labels`(예: `{"US-H1B": "H-1B (transfer required)"}`)
+· `bold`(ATS 디자인본에서 굵게 할 문구). 커버레터는 `cover-letter.md` 맨 위 front matter(`date` · `to` · `re`)로 머리글을 채운다
+(형식은 `render_cover_letter.py` 머리 주석).
 
 Tailored 행 속성: `Name`=stable-id · `Job` 관계 · `Company` · `Variant` (`job-specific` 기본, 여러 공고 공용이면 `cluster`,
 미완이면 `draft`) · `Status`=`current` (재튜닝 시 이전 행은 `superseded`, 제출되면 applicator 가 `submitted`) ·
@@ -124,7 +126,9 @@ Activity Log에 `Tailored` 이벤트 추가 (`Agent: Resume Tailor`). 첨부 절
 1. briefer 가 승격시킨 Jobs 행을 받는다. /sync 가 안 됐으면 먼저 돈다
 2. notion-fetch → Title, Company, Stable ID, JD snapshot, JD URL
 3. 선별 알고리즘 실행 → data/cache/tailored/<stable-id>/ 에 작업
-   <PY> data/render/build_resume.py · render_html.py · render_cover_letter.py   (있을 때만)
+   resume.json · cover-letter.md (+ render.json) 을 쓰고
+   <PY> scripts/render/render_html.py · render_cover_letter.py <작업 폴더>   (Python 이 있을 때)
+   폼이 ATS 평문·docx 를 요구하면 <PY> scripts/render/build_machine_readable.py <작업 폴더> → machine/
 4. <PY> scripts/validate_resume.py data/cache/tailored/<stable-id>/resume.json
 5. Tailored 행 생성: 본문 resume.md · 하위 페이지 cover-letter / tailoring_notes ·
    첨부 resume.json (+ html/pdf) — hooks/notion-files.md

@@ -746,7 +746,8 @@ Notion MCP만 필수다. 나머지는 없으면 **기능이 줄어들 뿐 깨지
      충돌과 지연을 만들었고, Notion 은 이미 모든 기기에서 보였다.
   2. **엔진은 GitHub 에** — engine 은 `git pull` 로 갱신되는데 렌더 스크립트 사본이 `data/tailored/` 안에
      흩어져 있었다. 데이터 폴더에 코드가 섞이면 업데이트가 닿지 않는다 (→ `scripts/render/` 로 모았으나, 개인 정보가 코드에
-     박혀 있어 2026-10-28 `data/render/` 로 되돌렸다. 범용화하면 다시 엔진으로 올린다).
+     박혀 있어 2026-10-28 `data/render/` 로 되돌렸다. 2026-10-30 범용화 — 개인 값은 작업 폴더의 `resume.json`·`render.json`
+     에서 읽는다 — 해 다시 `scripts/render/` 로 올렸다. 공고 전용이던 `build_resume.py` 는 resume-tailor 의 일이라 버렸다).
   3. **470 MB 공공 캐시가 `data/` 를 오염** — DOL LCA·USCIS 데이터는 개인정보가 아닌데 `data/h1b/` 에 있어
      백업 zip 이 터지고 "data/ 는 전부 개인정보"라는 규칙이 거짓이 됐다 (→ `.cache/h1b/`).
   4. **문서 난립** — `data/docs/` 에 회사 폴더와 날짜 붙은 스윕 리포트가 뒤섞여 Jobs 행에서 찾아갈 수 없었다.

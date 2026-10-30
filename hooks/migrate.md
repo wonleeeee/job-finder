@@ -174,7 +174,7 @@ Event type 을 바꾸고 접두어를 지운다 (append-only 원칙의 예외 �
 | `data/backups/master_resume.v*.json` 등 | Resume Versions 의 이전 버전 행들 (`Current` ✘) | 없음 |
 | `data/autonomy.yaml` | **Settings** 페이지의 ```yaml 블록 | `data/cache/autonomy.yaml` (/sync 사본) |
 | `data/tailored/<id>/` | **Tailored** 행 (행=stable-id, 본문 resume.md, 하위 페이지 cover-letter · tailoring_notes · submit-kit · kits/*, 첨부 resume.json · PDF). Jobs.`Tailored resume` 가 행 URL 을 가리킨다 | `data/cache/tailored/<id>/` (작업 사본, 필요 시) |
-| `data/tailored/*/render_*.py` `build_*.py` (엔진 코드 사본) | — | **`data/render/`** (개인 정보가 코드에 박혀 있어 엔진에 둘 수 없다 · gitignore. 범용화 전까지) |
+| `data/tailored/*/render_*.py` `build_*.py` (엔진 코드 사본) | — | 없음 — 범용화해 **`scripts/render/`** (엔진). 남은 `data/render/` 는 지워도 된다 |
 | `data/docs/**` | **Documents** 행 (Type · Company · Job 관계 · Source path 에 옛 경로) | 없음 |
 | `data/outreach/queue.yaml` + `drafts/*.md` | **Outreach Queue** 행 (본문=초안) | 없음 |
 | `data/h1b/` (DOL LCA · USCIS, ~470MB 공공 데이터) | — | **`.cache/h1b/`** 로 이동 (`scripts/h1b_sponsors.py` 갱신됨) |
